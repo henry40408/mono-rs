@@ -3,7 +3,9 @@ members = [
     "cdu",
     "hcc/core",
     "hcc/pushover",
-    "hcc/server"
+    "hcc/server",
+    "pushover/pushover",
+    "pushover/po"
 ]
 
 [profile.release]

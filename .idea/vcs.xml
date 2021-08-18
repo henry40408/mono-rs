@@ -4,5 +4,7 @@
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/cdu" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/hcc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pullover" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/pushover" vcs="Git" />
   </component>
 </project>
