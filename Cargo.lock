@@ -1418,11 +1418,10 @@ dependencies = [
  "anyhow",
  "chrono",
  "cron",
- "futures",
  "hcc",
  "log",
  "pretty_env_logger",
- "reqwest",
+ "pushover",
  "structopt",
  "tokio 1.10.0",
 ]

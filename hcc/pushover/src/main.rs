@@ -23,6 +23,7 @@ use log::info;
 use structopt::StructOpt;
 
 use hcc::CheckClient;
+use pushover::Notification;
 
 #[derive(Debug, StructOpt)]
 #[structopt(author, about)]
@@ -40,8 +41,6 @@ struct Opts {
     #[structopt(short = "u", long = "user", env = "PUSHOVER_USER")]
     pushover_user: String,
 }
-
-const PUSHOVER_API: &str = "https://api.pushover.net/1/messages.json";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -78,27 +77,15 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
     let check_client = CheckClient::new();
     let results = check_client.check_certificates(domain_names)?;
 
-    let mut futs = vec![];
-
-    let pushover_client = reqwest::Client::new();
     for result in results {
         let state_icon = result.state_icon(true);
         let sentence = result.sentence();
-
         let message = format!("{} {}", state_icon, sentence);
-        let form = [
-            ("message", &message),
-            ("user", &opts.pushover_user),
-            ("token", &opts.pushover_token),
-            (
-                "title",
-                &format!("HTTP Certificate Check - {}", result.domain_name),
-            ),
-        ];
-        futs.push(pushover_client.post(PUSHOVER_API).form(&form).send());
-    }
 
-    futures::future::try_join_all(futs).await?;
+        let mut n = Notification::new(&opts.pushover_token, &opts.pushover_user, &message);
+        n.request.title = Some(format!("HTTP Certificate Check - {}", result.domain_name).into());
+        n.send().await?;
+    }
 
     Ok(())
 }
