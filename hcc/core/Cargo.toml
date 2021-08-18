@@ -1,0 +1,25 @@
+[package]
+name = "hcc"
+version = "0.1.0"
+authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
+edition = "2018"
+description = "HTTPS Certificate Check"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.38"
+chrono = { version = "0.4.19", default-features = false, features = ["clock"] }
+futures = "0.3.13"
+num-format = "0.4.0"
+rustls = { version = "0.19.0", default-features = false }
+serde = { version = "1.0.123", features = ["derive"] }
+serde_derive = "1.0.123"
+serde_json = "1.0.61"
+structopt = "0.3.21"
+webpki = "0.21.3"
+webpki-roots = "0.21.0"
+x509-parser = "0.9.1"
+
+[dev-dependencies]
+tokio = { version = "1.2.0", features = ["macros", "rt"] }

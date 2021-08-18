@@ -1,0 +1,9 @@
+[target.x86_64-unknown-linux-musl.env]
+passthrough = [
+    "RUSTFLAGS"
+]
+
+[target.armv7-unknown-linux-musleabihf.env]
+passthrough = [
+    "RUSTFLAGS"
+]

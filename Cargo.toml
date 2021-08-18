@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "cdu",
+    "hcc/core",
+    "hcc/pushover",
+    "hcc/server"
+]
+
+[profile.release]
+lto = true
+opt-level = "z"
+panic = "abort"

@@ -1,0 +1,24 @@
+[package]
+name = "cdu"
+version = "0.2.1"
+authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
+edition = "2018"
+description = "Cloudflare DNS record update"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.38"
+chrono = { version = "0.4.19", default-features = false }
+cloudflare = { version = "0.8.2", default-features = false, features = ["rustls-tls"] }
+cron = "0.9.0"
+futures = "0.3.16"
+log = "0.4.14"
+pretty_env_logger = "0.4.0"
+public-ip = { version = "0.2.0", default-features = false, features = ["google", "opendns", "tokio-http-resolver", "ipify-org"] }
+structopt = "0.3.21"
+tokio = { version = "1.2.0", features = ["macros", "rt-multi-thread", "time"] }
+tokio-retry = "0.3.0"
+ttl_cache = "0.5.1"
+
+[dev-dependencies]

@@ -1,0 +1,19 @@
+[package]
+name = "hcc-server"
+version = "0.1.2"
+authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
+edition = "2018"
+description = "Server to check HTTPS Certificate"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-web = "3"
+anyhow = "1.0.38"
+env_logger = "0.9.0"
+log = "0.4.14"
+hcc = { path = "../core" }
+serde = { version = "1.0.123", features = ["derive"] }
+serde_derive = "1.0.123"
+structopt = "0.3.21"
+tokio = { version = "1", features = ["rt-multi-thread", "signal", "sync"] }
