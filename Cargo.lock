@@ -2162,7 +2162,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pops"
+name = "pop"
 version = "0.1.0"
 dependencies = [
  "actix-web 4.0.0-beta.8",

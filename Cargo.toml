@@ -6,7 +6,7 @@ members = [
     "hcc/server",
     "pushover/pushover",
     "pushover/po",
-    "pop/server"
+    "pop"
 ]
 
 [profile.release]
