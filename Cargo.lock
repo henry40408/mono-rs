@@ -2162,21 +2162,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pop"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "atty",
- "infer",
- "mockito",
- "reqwest",
- "serde",
- "serde_json",
- "structopt",
- "tokio 1.10.0",
-]
-
-[[package]]
 name = "pops"
 version = "0.1.0"
 dependencies = [

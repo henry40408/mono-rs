@@ -15,7 +15,7 @@
 use std::borrow::Cow;
 
 use reqwest::multipart;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 mod attachment;
@@ -248,7 +248,7 @@ impl<'a> Notification<'a> {
 }
 
 /// Pushover API response <https://pushover.net/api#response>
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Response {
     /// If POST request to API was valid, we will receive an HTTP 200 (OK) status, with a JSON object containing a status code of `1`.
     pub status: u8,

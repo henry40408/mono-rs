@@ -3,10 +3,10 @@
 use actix_web::{middleware, post, web, App, HttpRequest, HttpResponse, HttpServer};
 use env_logger::Env;
 use log::warn;
+use pushover::{Attachment, Notification, Priority, Sound, HTML};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use structopt::StructOpt;
-
-use pop::notification::Notification;
 
 #[derive(StructOpt)]
 #[structopt(about, author)]
@@ -30,34 +30,13 @@ struct Message {
     device: Option<String>,
     title: Option<String>,
     message: String,
-    html: Option<u8>,
+    html: Option<String>,
     timestamp: Option<u64>,
-    priority: Option<u8>,
+    priority: Option<String>,
     url: Option<String>,
     url_title: Option<String>,
     sound: Option<String>,
     image_url: Option<String>,
-}
-
-impl Message {
-    async fn to_notification(&self, token: &str, user: &str) -> anyhow::Result<Notification> {
-        let mut n = Notification::new(token, user, &self.message);
-
-        n.request.device = self.device.clone();
-        n.request.title = self.title.clone();
-        n.request.html = self.html;
-        n.request.timestamp = self.timestamp;
-        n.request.priority = self.priority;
-        n.request.url = self.url.clone();
-        n.request.url_title = self.url_title.clone();
-        n.request.sound = self.sound.clone();
-
-        if let Some(ref url) = self.image_url {
-            n.attach_url(url).await
-        } else {
-            Ok(n)
-        }
-    }
 }
 
 struct AppState {
@@ -101,14 +80,54 @@ async fn messages(
         // authorization is absent
     }
 
-    let notification = match message.to_notification(&data.token, &data.user).await {
-        Ok(n) => n,
-        Err(e) => return HttpResponse::BadRequest().body(format!("{:?}", e)),
-    };
+    let mut n = Notification::new(&data.token, &data.user, &message.message);
 
-    let response = match notification.send().await {
+    if let Some(ref d) = message.device {
+        n.request.device = Some(d.into());
+    }
+    if let Some(ref t) = message.title {
+        n.request.title = Some(t.into());
+    }
+    if let Some(ref h) = message.html {
+        n.request.html = Some(match HTML::from_str(h) {
+            Ok(h) => h,
+            Err(e) => return bad_request(e),
+        });
+    }
+
+    n.request.timestamp = message.timestamp;
+
+    if let Some(ref p) = message.priority {
+        n.request.priority = Some(match Priority::from_str(p) {
+            Ok(p) => p,
+            Err(e) => return bad_request(e),
+        });
+    }
+    if let Some(ref u) = message.url {
+        n.request.url = Some(u.into());
+        if let Some(ref t) = message.url_title {
+            n.request.url_title = Some(t.into());
+        }
+    }
+    if let Some(ref s) = message.sound {
+        n.request.sound = Some(match Sound::from_str(s) {
+            Ok(s) => s,
+            Err(e) => return bad_request(e),
+        });
+    }
+
+    let attachment;
+    if let Some(ref url) = message.image_url {
+        attachment = match Attachment::from_url(url).await {
+            Ok(a) => a,
+            Err(e) => return bad_request(e),
+        };
+        n.attach(&attachment);
+    }
+
+    let response = match n.send().await {
         Ok(r) => r,
-        Err(e) => return HttpResponse::BadRequest().body(format!("{:?}", e)),
+        Err(e) => return bad_request(e),
     };
 
     if 1 == response.status {
@@ -116,6 +135,10 @@ async fn messages(
     } else {
         HttpResponse::BadRequest().json(&response)
     }
+}
+
+fn bad_request<S: std::fmt::Debug>(e: S) -> HttpResponse {
+    HttpResponse::BadRequest().body(format!("{:?}", e))
 }
 
 #[actix_web::main]

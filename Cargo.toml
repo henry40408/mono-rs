@@ -6,7 +6,6 @@ members = [
     "hcc/server",
     "pushover/pushover",
     "pushover/po",
-    "pop/cli",
     "pop/server"
 ]
 
