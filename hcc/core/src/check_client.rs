@@ -9,6 +9,7 @@ use rustls::{ClientConfig, Session};
 use x509_parser::parse_x509_certificate;
 
 use crate::check_result::{CheckResult, CheckState};
+use std::fmt::Formatter;
 use std::time::Instant;
 
 /// Client to check SSL certificate
@@ -17,6 +18,16 @@ pub struct CheckClient {
     config: Arc<ClientConfig>,
     elapsed: bool,
     grace_in_days: i64,
+}
+
+impl std::fmt::Debug for CheckClient {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CheckClient {{ checked_at: {:?}, elapsed: {:?}, grace_in_days: {:?} }}",
+            self.checked_at, self.elapsed, self.grace_in_days
+        )
+    }
 }
 
 impl Default for CheckClient {
@@ -35,7 +46,7 @@ impl Default for CheckClient {
 }
 
 impl CheckClient {
-    /// Create an instance of client
+    /// Create a [`CheckClient`]
     ///
     /// ```
     /// # use hcc::CheckClient;
@@ -45,10 +56,11 @@ impl CheckClient {
         CheckClient::default()
     }
 
-    /// Create an instance of client with builder
+    /// Create a [`CheckClient`] with [`CheckClientBuilder`]
     ///
     /// ```
     /// # use hcc::CheckClient;
+    /// let builder = CheckClient::builder();
     /// ```
     pub fn builder() -> CheckClientBuilder {
         CheckClientBuilder::default()
@@ -155,23 +167,27 @@ impl CheckClient {
     }
 }
 
-#[derive(Default)]
+/// Builder for [`CheckClient`]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct CheckClientBuilder {
     elapsed: bool,
     grace_in_days: i64,
 }
 
 impl CheckClientBuilder {
+    /// Whether to show elapsed time of check
     pub fn elapsed(&mut self, elapsed: bool) -> &mut Self {
         self.elapsed = elapsed;
         self
     }
 
+    /// Grace period before SSL certificate expires
     pub fn grace_in_days(&mut self, grace_in_days: i64) -> &mut Self {
         self.grace_in_days = grace_in_days;
         self
     }
 
+    /// Build a [`CheckClient`]
     pub fn build(&self) -> CheckClient {
         CheckClient {
             elapsed: self.elapsed,

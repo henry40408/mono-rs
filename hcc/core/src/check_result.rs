@@ -5,8 +5,8 @@ use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 
-/// State of Certificate
-#[derive(Debug)]
+/// State of SSL certificate
+#[derive(Clone, Copy, Debug)]
 pub enum CheckState {
     /// Default state
     Unknown,
@@ -155,7 +155,7 @@ impl<'a> CheckResult<'a> {
 }
 
 impl<'a> fmt::Display for CheckResult<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let mut s = String::with_capacity(100);
 
         s.push_str(&self.state_icon(false));
@@ -173,7 +173,7 @@ impl<'a> fmt::Display for CheckResult<'a> {
 }
 
 /// Check result in JSON format
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CheckResultJSON {
     /// State of certificate
     pub state: String,
