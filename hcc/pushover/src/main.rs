@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Result<()> {
     let check_client = CheckClient::new();
-    let results = check_client.check_certificates(domain_names)?;
+    let results = check_client.check_certificates(domain_names).await?;
 
     let mut futs = vec![];
 

@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use futures::{executor, future};
 use rustls::{ClientConfig, Session};
 use x509_parser::parse_x509_certificate;
 
@@ -132,7 +131,7 @@ impl CheckClient {
     /// let client = CheckClient::new();
     /// client.check_certificates(&["sha256.badssl.com", "sha256.badssl.com"]);
     /// ```
-    pub fn check_certificates<'a>(
+    pub async fn check_certificates<'a>(
         &'a self,
         domain_names: &'a [&str],
     ) -> anyhow::Result<Vec<CheckResult<'a>>> {
@@ -144,13 +143,7 @@ impl CheckClient {
             futs.push(client.check_certificate(domain_name));
         }
 
-        let resolved = executor::block_on(future::join_all(futs));
-        let mut results = vec![];
-        for result in resolved {
-            let result = result?;
-            results.push(result);
-        }
-        Ok(results)
+        Ok(futures::future::try_join_all(futs).await?)
     }
 
     fn build_http_headers(domain_name: &str) -> String {
@@ -226,10 +219,11 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_check_certificates() {
+    async fn test_check_certificates() -> anyhow::Result<()> {
         let domain_names = vec!["sha512.badssl.com", "expired.badssl.com"];
         let client = CheckClient::new();
-        let results = client.check_certificates(domain_names.as_slice()).unwrap();
+
+        let results = client.check_certificates(domain_names.as_slice()).await?;
         assert_eq!(2, results.len());
 
         let result = results.get(0).unwrap();
@@ -237,6 +231,8 @@ mod test {
 
         let result = results.get(1).unwrap();
         assert!(matches!(result.state, CheckState::Expired));
+
+        Ok(())
     }
 
     #[tokio::test]
