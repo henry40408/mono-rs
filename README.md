@@ -2,6 +2,8 @@
 
 > Mono repository for my Rust projects
 
+![CI](https://img.shields.io/github/workflow/status/henry40408/mono-rs/CI?style=flat-square) ![license](https://img.shields.io/github/license/henry40408/mono-rs?style=flat-square) ![top languages](https://img.shields.io/github/languages/top/henry40408/mono-rs?style=flat-square)
+
 ## Projects
 
 1. [cdu](cdu/README.md) **C**loudflare **D**NS **U**pdate
