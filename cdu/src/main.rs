@@ -12,7 +12,6 @@
 
 //! Cloudflare DNS record update
 
-use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -24,21 +23,16 @@ use structopt::StructOpt;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 
 use cdu::{Cdu, Opts, PublicIPError};
+use env_logger::Env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opts: Opts = Opts::from_args();
 
     let cdu = Cdu::new(opts);
-    if env::var_os("RUST_LOG").is_none() {
-        if cdu.is_debug() {
-            env::set_var("RUST_LOG", "cdu=debug");
-        } else {
-            env::set_var("RUST_LOG", "cdu=info");
-        }
-    }
 
-    pretty_env_logger::init();
+    let default_level = if cdu.is_debug() { "debug" } else { "info" };
+    env_logger::Builder::from_env(Env::default().default_filter_or(default_level)).init();
 
     if cdu.is_daemon() {
         run_daemon(cdu).await?;

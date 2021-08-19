@@ -714,9 +714,9 @@ dependencies = [
  "chrono",
  "cloudflare",
  "cron",
+ "env_logger",
  "futures",
  "log",
- "pretty_env_logger",
  "public-ip",
  "structopt",
  "tokio 1.10.0",
@@ -1122,25 +1122,12 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
-dependencies = [
- "atty",
- "humantime 1.3.0",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
 dependencies = [
  "atty",
- "humantime 2.1.0",
+ "humantime",
  "log",
  "regex",
  "termcolor",
@@ -1418,10 +1405,10 @@ dependencies = [
  "anyhow",
  "chrono",
  "cron",
+ "env_logger",
  "futures",
  "hcc",
  "log",
- "pretty_env_logger",
  "pushover",
  "structopt",
  "tokio 1.10.0",
@@ -1433,7 +1420,7 @@ version = "0.1.2"
 dependencies = [
  "actix-web 3.3.2",
  "anyhow",
- "env_logger 0.9.0",
+ "env_logger",
  "hcc",
  "log",
  "serde",
@@ -1504,15 +1491,6 @@ name = "httpdate"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6456b8a6c8f33fee7d958fcd1b60d55b11940a79e63ae87013e6d22e26034440"
-
-[[package]]
-name = "humantime"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df004cfca50ef23c36850aaaa59ad52cc70d0e90243c3c7737a4dd32dc7a3c4f"
-dependencies = [
- "quick-error",
-]
 
 [[package]]
 name = "humantime"
@@ -2167,7 +2145,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web 4.0.0-beta.8",
  "anyhow",
- "env_logger 0.9.0",
+ "env_logger",
  "log",
  "pushover",
  "serde",
@@ -2181,16 +2159,6 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
-
-[[package]]
-name = "pretty_env_logger"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "926d36b9553851b8b0005f1275891b392ee4d2d833852c417ed025477350fb9d"
-dependencies = [
- "env_logger 0.7.1",
- "log",
-]
 
 [[package]]
 name = "proc-macro-error"

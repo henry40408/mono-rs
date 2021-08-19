@@ -12,7 +12,6 @@
 
 //! Daemon to send check result to Pushover
 
-use std::env;
 use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
@@ -22,6 +21,7 @@ use cron::Schedule;
 use log::info;
 use structopt::StructOpt;
 
+use env_logger::Env;
 use hcc::CheckClient;
 use pushover::Notification;
 use std::sync::Arc;
@@ -45,16 +45,12 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    if env::var_os("RUST_LOG").is_none() {
-        env::set_var("RUST_LOG", "hcc_pushover=info");
-    }
-
-    pretty_env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let opts: Opts = Opts::from_args();
     let schedule = Schedule::from_str(&opts.cron)?;
 
-    info!("check HTTPS certficates with cron {}", &opts.cron);
+    info!("check HTTPS certificates with cron {}", &opts.cron);
     for datetime in schedule.upcoming(Utc) {
         info!("check certificate of {} at {}", opts.domain_names, datetime);
         loop {
