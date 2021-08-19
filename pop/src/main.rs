@@ -66,7 +66,7 @@ fn get_authorization(req: &HttpRequest) -> Option<&str> {
     req.headers().get("authorization")?.to_str().ok()
 }
 
-#[post("/v1/messages")]
+#[post("/1/messages")]
 async fn messages(
     req: HttpRequest,
     data: web::Data<AppState>,
