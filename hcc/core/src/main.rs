@@ -43,7 +43,8 @@ enum Command {
     },
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let opts: Opts = Opts::from_args();
     match opts.command {
         Some(Command::Check {
@@ -51,13 +52,13 @@ fn main() -> anyhow::Result<()> {
             grace_in_days,
         }) => {
             let domain_names: Vec<&str> = domain_names.iter().map(AsRef::as_ref).collect();
-            check_command(&opts, &domain_names, grace_in_days)
+            check_command(&opts, &domain_names, grace_in_days).await
         }
         None => Ok(()),
     }
 }
 
-fn check_command<'a>(
+async fn check_command<'a>(
     opts: &Opts,
     domain_names: &'a [&str],
     grace_in_days: i64,
@@ -67,7 +68,7 @@ fn check_command<'a>(
         .grace_in_days(grace_in_days)
         .build();
 
-    let results = client.check_certificates(domain_names)?;
+    let results = client.check_certificates(domain_names).await?;
 
     if opts.json {
         let s = if results.len() > 1 {
@@ -99,27 +100,31 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_check_command() {
+    #[tokio::test]
+    async fn test_check_command() -> anyhow::Result<()> {
         let opts = build_opts(false);
-        check_command(&opts, &vec!["sha512.badssl.com"], 7).unwrap();
+        check_command(&opts, &vec!["sha512.badssl.com"], 7).await?;
+        Ok(())
     }
 
-    #[test]
-    fn test_check_command_json() {
+    #[tokio::test]
+    async fn test_check_command_json() -> anyhow::Result<()> {
         let opts = build_opts(true);
-        check_command(&opts, &vec!["sha512.badssl.com"], 7).unwrap();
+        check_command(&opts, &vec!["sha512.badssl.com"], 7).await?;
+        Ok(())
     }
 
-    #[test]
-    fn test_check_command_expired() {
+    #[tokio::test]
+    async fn test_check_command_expired() -> anyhow::Result<()> {
         let opts = build_opts(false);
-        check_command(&opts, &vec!["expired.badssl.com"], 7).unwrap();
+        check_command(&opts, &vec!["expired.badssl.com"], 7).await?;
+        Ok(())
     }
 
-    #[test]
-    fn test_check_command_expired_json() {
+    #[tokio::test]
+    async fn test_check_command_expired_json() -> anyhow::Result<()> {
         let opts = build_opts(true);
-        check_command(&opts, &vec!["expired.badssl.com"], 7).unwrap();
+        check_command(&opts, &vec!["expired.badssl.com"], 7).await?;
+        Ok(())
     }
 }

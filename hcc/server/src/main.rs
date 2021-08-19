@@ -31,7 +31,11 @@ async fn show_domain_name(
     web::Path((domain_names,)): web::Path<(String,)>,
 ) -> HttpResponse {
     let domain_names: Vec<&str> = domain_names.split(',').map(|s| s.trim()).collect();
-    let results = match data.client.check_certificates(domain_names.as_slice()) {
+    let results = match data
+        .client
+        .check_certificates(domain_names.as_slice())
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             return HttpResponse::InternalServerError().json(&ErrorMessage {
