@@ -1,14 +1,12 @@
 # hcc
 
-![GitHub Workflow](https://github.com/henry40408/hcc/actions/workflows/workflow.yml/badge.svg) ![GitHub](https://img.shields.io/github/license/henry40408/hcc)
-
-**H**TTPS **C**ertificate **C**heck
+> **H**TTPS **C**ertificate **C**heck
 
 ## Features
 
 * A daemon checks HTTPS certificates periodically with cron
-* An HTTP server performs checks with incoming requests
-* Check results can be sent to [Pushover](https://pushover.net/)
+* An HTTP server performs checks domain names on demand
+* Daemon can send check results to [Pushover](https://pushover.net/)
 
 ## Usage
 
@@ -20,18 +18,11 @@ $ cargo run --bin hcc -- check httpbin.org
 
 ### Server
 
-Run as Docker container:
-
-```bash
-$ make amd64
-$ docker run -it -p 9292:9292 henry40408/hcc:$(git rev-parse --short HEAD)-amd64 /hcc-server -b 0.0.0.0:9292
-```
-
-Run directly:
-
 ```bash
 $ cargo run --bin hcc-server
 ```
+
+Usage:
 
 ```bash
 $ curl :9292/sha512.badssl.com
@@ -47,10 +38,10 @@ $ curl :9292/sha512.badssl.com,expired.badssl.com
 ### Daemon and Pushover
 
 ```bash
-$ DOMAIN_NAMES=www.example.com,sha512.badssl.com \
-  PUSHOVER_TOKEN=token \
-  PUSHOVER_USER=user \
-  cargo run --bin hcc-pushover
+$ export DOMAIN_NAMES=www.example.com,sha512.badssl.com
+$ export PUSHOVER_TOKEN=[Pushover API token]
+$ export PUSHOVER_USER=[Pushover user key]
+$ cargo run --bin hcc-pushover
 ```
 
 ## Contributing
@@ -58,7 +49,3 @@ $ DOMAIN_NAMES=www.example.com,sha512.badssl.com \
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
 Please make sure to update tests as appropriate.
-
-## License
-
-[MIT](https://choosealicense.com/licenses/mit/)
