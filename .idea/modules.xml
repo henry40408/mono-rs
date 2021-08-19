@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/mono.iml" filepath="$PROJECT_DIR$/.idea/mono.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/mono-rs.iml" filepath="$PROJECT_DIR$/.idea/mono-rs.iml" />
     </modules>
   </component>
 </project>

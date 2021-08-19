@@ -1,6 +1,7 @@
 use structopt::StructOpt;
 
-#[derive(StructOpt)]
+/// Argument parser
+#[derive(Debug, StructOpt)]
 #[structopt(about, author)]
 pub struct Opts {
     /// Cloudflare token

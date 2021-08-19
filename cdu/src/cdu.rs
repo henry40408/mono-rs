@@ -16,18 +16,27 @@ use tokio::task::JoinHandle;
 use ttl_cache::TtlCache;
 
 use crate::{Opts, PublicIPError};
+use std::fmt::Formatter;
 
 const HTTP_TIMEOUT: u64 = 30;
 
 const ZONE: u8 = 1;
 const RECORD: u8 = 2;
 
+/// Cloudflare DNS Update
 pub struct Cdu {
     opts: Opts,
     cache: Arc<Mutex<TtlCache<(u8, String), String>>>,
 }
 
+impl std::fmt::Debug for Cdu {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Cdu {{ opts: {:?} }}", self.opts)
+    }
+}
+
 impl Cdu {
+    /// Creates an [`Cdu`]
     pub fn new(opts: Opts) -> Self {
         let capacity = opts.record_name_list().len();
         Self {
@@ -37,7 +46,7 @@ impl Cdu {
         }
     }
 
-    pub fn cache_ttl(&self) -> Option<Duration> {
+    pub(crate) fn cache_ttl(&self) -> Option<Duration> {
         if self.opts.cache_seconds > 0 {
             Some(Duration::from_secs(self.opts.cache_seconds))
         } else {
@@ -45,14 +54,17 @@ impl Cdu {
         }
     }
 
+    /// Cron syntax from argument parser
     pub fn cron(&self) -> &str {
         &self.opts.cron
     }
 
+    /// Is debug mode enabled?
     pub fn is_debug(&self) -> bool {
         self.opts.debug
     }
 
+    /// Is daemon mode enabled?
     pub fn is_daemon(&self) -> bool {
         self.opts.daemon
     }
@@ -95,6 +107,7 @@ impl Cdu {
         Ok((duration, id))
     }
 
+    /// Perform DNS record update on Cloudflare
     pub async fn run(&self) -> anyhow::Result<()> {
         let ip_address = public_ip::addr_v4().await.ok_or(PublicIPError)?;
 

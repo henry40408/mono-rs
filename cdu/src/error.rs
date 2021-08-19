@@ -1,4 +1,5 @@
-#[derive(Debug, Clone)]
+/// Failed to determine public IPv4 address with [`public_ip`]
+#[derive(Debug, Clone, Copy)]
 pub struct PublicIPError;
 
 impl std::fmt::Display for PublicIPError {
