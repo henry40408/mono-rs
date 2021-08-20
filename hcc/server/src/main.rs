@@ -12,7 +12,7 @@ use hcc::{CheckClient, CheckResultJSON};
 #[structopt(author, about)]
 struct Opts {
     /// host:port to be bound to the server
-    #[structopt(short, long, default_value = "127.0.0.1:9292")]
+    #[structopt(short, long, default_value = "127.0.0.1:3000")]
     bind: String,
 }
 
