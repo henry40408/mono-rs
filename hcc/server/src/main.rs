@@ -1,11 +1,16 @@
 #![forbid(unsafe_code)]
 
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use env_logger::Env;
 use log::info;
 use serde::Serialize;
 use structopt::StructOpt;
+use warp::http::StatusCode;
+use warp::Filter;
 
-use actix_web::{get, middleware, web, App, HttpResponse, HttpServer};
-use env_logger::Env;
 use hcc::{CheckClient, CheckResultJSON};
 
 #[derive(Debug, StructOpt)]
@@ -17,60 +22,126 @@ struct Opts {
 }
 
 #[derive(Serialize)]
-struct ErrorMessage {
-    message: String,
+struct ErrorJSON {
+    error: String,
 }
 
 struct AppState {
     client: CheckClient,
 }
 
-#[get("/{domain_names}")]
-async fn show_domain_name(
-    data: web::Data<AppState>,
-    web::Path((domain_names,)): web::Path<(String,)>,
-) -> HttpResponse {
+fn with_state(
+    state: Arc<AppState>,
+) -> impl Filter<Extract = (Arc<AppState>,), Error = Infallible> + Clone {
+    warp::any().map(move || state.clone())
+}
+
+#[derive(Debug)]
+enum Rejection {
+    BadRequest(String),
+}
+
+impl warp::reject::Reject for Rejection {}
+
+async fn check_domain_names(
+    state: Arc<AppState>,
+    domain_names: String,
+) -> Result<impl warp::Reply, warp::Rejection> {
     let domain_names: Vec<&str> = domain_names.split(',').map(|s| s.trim()).collect();
-    let results = match data
+    let results = match state
         .client
         .check_certificates(domain_names.as_slice())
         .await
     {
         Ok(r) => r,
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(&ErrorMessage {
-                message: format!("{:?}", e),
-            });
-        }
+        Err(e) => return Err(warp::reject::custom(Rejection::BadRequest(e.to_string()))),
     };
     if results.len() == 1 {
         let json = CheckResultJSON::new(results.first().unwrap());
-        HttpResponse::Ok().json(&json)
+        Ok(warp::reply::json(&json))
     } else {
         let json: Vec<CheckResultJSON> = results.iter().map(CheckResultJSON::new).collect();
-        HttpResponse::Ok().json(&json)
+        Ok(warp::reply::json(&json))
     }
 }
 
-#[actix_web::main]
+fn domain_names_filter(
+    state: Arc<AppState>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::get()
+        .and(with_state(state))
+        .and(warp::path::param::<String>())
+        .and_then(|state: Arc<AppState>, domain_names: String| async move {
+            check_domain_names(state, domain_names).await
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use warp::http::Method;
+
+    use hcc::CheckClient;
+
+    use crate::{domain_names_filter, AppState};
+
+    fn build_state() -> Arc<AppState> {
+        Arc::new(AppState {
+            client: CheckClient::builder().elapsed(true).build(),
+        })
+    }
+
+    #[tokio::test]
+    async fn test_domain_names_filter() {
+        let state = build_state();
+        let filter = domain_names_filter(state);
+        let res = warp::test::request()
+            .method(Method::GET.as_str())
+            .path("/sha512.badssl.com")
+            .reply(&filter)
+            .await;
+        assert_eq!(200, res.status());
+    }
+}
+
+async fn handle_rejection(
+    err: warp::reject::Rejection,
+) -> Result<impl warp::reply::Reply, Infallible> {
+    let status_code;
+    let error;
+
+    if let Some(Rejection::BadRequest(ref s)) = err.find() {
+        status_code = StatusCode::BAD_REQUEST;
+        error = s.to_string();
+    } else {
+        status_code = StatusCode::INTERNAL_SERVER_ERROR;
+        error = "unknown error".to_string();
+    }
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&ErrorJSON { error }),
+        status_code,
+    ))
+}
+
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let opts: Opts = Opts::from_args();
-    let data = web::Data::new(AppState {
+    let state = Arc::new(AppState {
         client: CheckClient::builder().elapsed(true).build(),
     });
 
-    info!("Served on {0}", &opts.bind);
-    HttpServer::new(move || {
-        App::new()
-            .app_data(data.clone())
-            .wrap(middleware::Logger::default())
-            .service(show_domain_name)
-    })
-    .bind(&opts.bind)?
-    .run()
-    .await?;
+    let filter = domain_names_filter(state);
+    let app = filter
+        .recover(handle_rejection)
+        .with(warp::log("hcc-server"));
+
+    let bind: SocketAddr = opts.bind.parse()?;
+    info!("running on {}", &opts.bind);
+    warp::serve(app).bind(bind).await;
 
     Ok(())
 }

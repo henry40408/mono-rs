@@ -97,7 +97,7 @@ async fn send_notification(
     opts: Arc<Opts>,
     actual: Option<String>,
     message: &Message,
-) -> Result<warp::reply::Json, warp::reject::Rejection> {
+) -> Result<warp::reply::Json, warp::Rejection> {
     match check_authorization(&opts.authorization, &actual) {
         AuthorizationState::Rejected => Err(warp::reject::custom(Rejection::Unauthorized)),
         AuthorizationState::Public | AuthorizationState::Accepted => {
@@ -175,7 +175,7 @@ fn with_opts(opts: Arc<Opts>) -> impl Filter<Extract = (Arc<Opts>,), Error = Inf
 
 fn one_messages_filter(
     opts: Arc<Opts>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::reject::Rejection> + Clone {
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     warp::post()
         .and(warp::path("1"))
         .and(warp::path("messages"))
@@ -223,9 +223,7 @@ mod tests {
     }
 }
 
-async fn handle_rejection(
-    err: warp::reject::Rejection,
-) -> Result<impl warp::reply::Reply, Infallible> {
+async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::reply::Reply, Infallible> {
     let status_code;
     let error;
 
