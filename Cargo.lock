@@ -2557,9 +2557,9 @@ checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 
 [[package]]
 name = "x509-parser"
-version = "0.9.2"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64abca276c58f8341ddc13fd4bd6ae75993cc669043f5b34813c90f7dff04771"
+checksum = "9fdb27e60230e9d42a67fc3893ed5273b3dc74b4173e29ac52da8084014778d9"
 dependencies = [
  "base64",
  "chrono",
@@ -2569,6 +2569,5 @@ dependencies = [
  "nom 6.2.1",
  "oid-registry",
  "rusticata-macros",
- "rustversion",
  "thiserror",
 ]
