@@ -12,13 +12,19 @@
 
 //! Pop is proxy server to Pushover with attachment support
 
-use actix_web::{middleware, post, web, App, HttpRequest, HttpResponse, HttpServer};
-use env_logger::Env;
-use log::warn;
-use pushover::{Attachment, Notification, Priority, Sound, HTML};
-use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
+
+use env_logger::Env;
+use log::{info, warn};
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
+use warp::Filter;
+
+use pushover::{Attachment, Notification, Priority, Sound, HTML};
+use warp::http::StatusCode;
 
 #[derive(StructOpt)]
 #[structopt(about, author)]
@@ -51,109 +57,195 @@ struct Message {
     image_url: Option<String>,
 }
 
-struct AppState {
-    authorization: Option<String>,
-    token: String,
-    user: String,
-}
-
 #[derive(Serialize)]
-struct ErrorMessage {
-    message: String,
+struct ErrorJson {
+    error: String,
 }
 
-fn get_authorization(req: &HttpRequest) -> Option<&str> {
-    req.headers().get("authorization")?.to_str().ok()
+enum AuthorizationState {
+    Public,
+    Accepted,
+    Rejected,
 }
 
-#[post("/1/messages")]
-async fn messages(
-    req: HttpRequest,
-    data: web::Data<AppState>,
-    message: web::Json<Message>,
-) -> HttpResponse {
-    if let Some(ref expected) = data.authorization {
-        if let Some(actual) = get_authorization(&req) {
-            if expected != actual {
-                // authorization and header are present but not equal
-                return HttpResponse::BadRequest().json(&ErrorMessage {
-                    message: "unauthorized".to_string(),
-                });
+fn check_authorization(expected: &Option<String>, actual: &Option<String>) -> AuthorizationState {
+    if let Some(e) = expected {
+        if let Some(a) = actual {
+            if a == e {
+                AuthorizationState::Accepted
             } else {
-                // authorization and header are present and equal
+                AuthorizationState::Rejected
             }
         } else {
-            // authorization is present but header is absent
-            return HttpResponse::BadRequest().json(&ErrorMessage {
-                message: "unauthorized".to_string(),
-            });
+            AuthorizationState::Rejected
         }
     } else {
-        // authorization is absent
-    }
-
-    let mut n = Notification::new(&data.token, &data.user, &message.message);
-
-    if let Some(ref d) = message.device {
-        n.request.device = Some(d.into());
-    }
-    if let Some(ref t) = message.title {
-        n.request.title = Some(t.into());
-    }
-    if let Some(ref h) = message.html {
-        n.request.html = Some(match HTML::from_str(h) {
-            Ok(h) => h,
-            Err(e) => return bad_request(e),
-        });
-    }
-
-    n.request.timestamp = message.timestamp;
-
-    if let Some(ref p) = message.priority {
-        n.request.priority = Some(match Priority::from_str(p) {
-            Ok(p) => p,
-            Err(e) => return bad_request(e),
-        });
-    }
-    if let Some(ref u) = message.url {
-        n.request.url = Some(u.into());
-        if let Some(ref t) = message.url_title {
-            n.request.url_title = Some(t.into());
-        }
-    }
-    if let Some(ref s) = message.sound {
-        n.request.sound = Some(match Sound::from_str(s) {
-            Ok(s) => s,
-            Err(e) => return bad_request(e),
-        });
-    }
-
-    let attachment;
-    if let Some(ref url) = message.image_url {
-        attachment = match Attachment::from_url(url).await {
-            Ok(a) => a,
-            Err(e) => return bad_request(e),
-        };
-        n.attach(&attachment);
-    }
-
-    let response = match n.send().await {
-        Ok(r) => r,
-        Err(e) => return bad_request(e),
-    };
-
-    if 1 == response.status {
-        HttpResponse::Ok().json(&response)
-    } else {
-        HttpResponse::BadRequest().json(&response)
+        AuthorizationState::Public
     }
 }
 
-fn bad_request<S: std::fmt::Debug>(e: S) -> HttpResponse {
-    HttpResponse::BadRequest().body(format!("{:?}", e))
+#[derive(Debug)]
+enum Rejection {
+    Unauthorized,
+    BadRequest(String),
+    Parse(String),
 }
 
-#[actix_web::main]
+impl warp::reject::Reject for Rejection {}
+
+async fn send_notification(
+    opts: Arc<Opts>,
+    actual: Option<String>,
+    message: &Message,
+) -> Result<warp::reply::Json, warp::Rejection> {
+    match check_authorization(&opts.authorization, &actual) {
+        AuthorizationState::Rejected => Err(warp::reject::custom(Rejection::Unauthorized)),
+        AuthorizationState::Public | AuthorizationState::Accepted => {
+            let mut n = Notification::new(&opts.token, &opts.user, &message.message);
+
+            if let Some(ref d) = message.device {
+                n.request.device = Some(d.into());
+            }
+
+            if let Some(ref t) = message.title {
+                n.request.title = Some(t.into());
+            }
+
+            if let Some(ref h) = message.html {
+                n.request.html = Some(match HTML::from_str(h) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        return Err(warp::reject::custom(Rejection::Parse(e.to_string())));
+                    }
+                });
+            }
+
+            if let Some(ref t) = message.timestamp {
+                n.request.timestamp = Some(*t);
+            }
+
+            if let Some(ref p) = message.priority {
+                n.request.priority = Some(match Priority::from_str(p) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let e = e.to_string();
+                        return Err(warp::reject::custom(Rejection::Parse(e)));
+                    }
+                })
+            }
+
+            if let Some(ref u) = message.url {
+                n.request.url = Some(u.into());
+                if let Some(ref t) = message.url_title {
+                    n.request.url_title = Some(t.into());
+                }
+            }
+
+            if let Some(ref s) = message.sound {
+                n.request.sound = Some(match Sound::from_str(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return Err(warp::reject::custom(Rejection::Parse(e.to_string())));
+                    }
+                });
+            }
+
+            let a;
+            if let Some(ref u) = message.image_url {
+                a = match Attachment::from_url(u).await {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return Err(warp::reject::custom(Rejection::BadRequest(e.to_string())));
+                    }
+                };
+                n.attach(&a);
+            }
+
+            match n.send().await {
+                Ok(r) => Ok(warp::reply::json(&r)),
+                Err(e) => Err(warp::reject::custom(Rejection::BadRequest(e.to_string()))),
+            }
+        }
+    }
+}
+
+fn with_opts(opts: Arc<Opts>) -> impl Filter<Extract = (Arc<Opts>,), Error = Infallible> + Clone {
+    warp::any().map(move || opts.clone())
+}
+
+fn one_messages_filter(
+    opts: Arc<Opts>,
+) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    warp::post()
+        .and(warp::path("1"))
+        .and(warp::path("messages"))
+        .and(with_opts(opts))
+        .and(warp::body::json())
+        .and(warp::header::optional::<String>("authorization"))
+        .and_then(
+            |opts: Arc<Opts>, message: Message, actual: Option<String>| async move {
+                send_notification(opts.clone(), actual, &message).await
+            },
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use mockito::mock;
+    use warp::http::Method;
+
+    use crate::one_messages_filter;
+
+    use super::Opts;
+
+    #[tokio::test]
+    async fn test_one_messages_filter() {
+        let _m = mock("POST", "/1/messages.json")
+            .with_status(200)
+            .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
+            .create();
+        let opts = Arc::new(Opts {
+            token: "".into(),
+            user: "".into(),
+            authorization: None,
+            bind: "".into(),
+        });
+        let filter = one_messages_filter(opts);
+        let res = warp::test::request()
+            .method(Method::POST.as_str())
+            .path("/1/messages")
+            .body(r#"{"message":"test"}"#)
+            .reply(&filter)
+            .await;
+        assert_eq!(200, res.status());
+    }
+}
+
+async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::reply::Reply, Infallible> {
+    let status_code;
+    let error;
+
+    if let Some(Rejection::Unauthorized) = err.find() {
+        status_code = StatusCode::UNAUTHORIZED;
+        error = "unauthorized".into();
+    } else if let Some(Rejection::BadRequest(ref s)) = err.find() {
+        status_code = StatusCode::BAD_REQUEST;
+        error = s.into();
+    } else {
+        eprintln!("{:?}", err);
+        status_code = StatusCode::INTERNAL_SERVER_ERROR;
+        error = "unknown error".into();
+    }
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&ErrorJson { error }),
+        status_code,
+    ))
+}
+
+#[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -162,21 +254,13 @@ async fn main() -> anyhow::Result<()> {
         warn!("no authorization set, server is vulnerable");
     }
 
-    let data = web::Data::new(AppState {
-        authorization: opts.authorization,
-        token: opts.token,
-        user: opts.user,
-    });
+    let opts = Arc::new(opts);
+    let filter = one_messages_filter(opts.clone());
+    let app = filter.recover(handle_rejection).with(warp::log("pop"));
 
-    HttpServer::new(move || {
-        App::new()
-            .app_data(data.clone())
-            .wrap(middleware::Logger::default())
-            .service(messages)
-    })
-    .bind(&opts.bind)?
-    .run()
-    .await?;
+    let bind: SocketAddr = opts.bind.parse()?;
+    info!("running on {}", opts.bind);
+    warp::serve(app).bind(bind).await;
 
     Ok(())
 }

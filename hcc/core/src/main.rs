@@ -58,9 +58,9 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn check_command<'a>(
+async fn check_command(
     opts: &Opts,
-    domain_names: &'a [&str],
+    domain_names: &[&str],
     grace_in_days: i64,
 ) -> anyhow::Result<()> {
     let client = CheckClient::builder()

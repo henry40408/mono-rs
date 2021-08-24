@@ -14,7 +14,7 @@ pub enum AttachmentError {
     #[error("reqwest error: {0}")]
     Reqwest(#[from] reqwest::Error),
     /// Error from [`url`] crate
-    #[error("URL error: {0}")]
+    #[error("attachment URL error: {0}")]
     Url(#[from] url::ParseError),
     /// Failed to infer MIME type, no extra information included
     #[error("unknown MIME type")]
@@ -62,6 +62,10 @@ impl Attachment {
             .map_or("filename", |t| t.last().map_or("filename", |t1| t1));
 
         let res = reqwest::get(url).await?;
+        let res = match res.error_for_status() {
+            Ok(r) => r,
+            Err(e) => return Err(AttachmentError::Reqwest(e)),
+        };
         let buffer = res.bytes().await?.to_vec();
 
         let mime_type = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
