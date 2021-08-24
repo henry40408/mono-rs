@@ -12,8 +12,6 @@
 
 //! Pushover is Pushover API wrapper with attachment support in Rust 2018 edition
 
-use std::borrow::Cow;
-
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -24,14 +22,14 @@ pub use attachment::{Attachment, AttachmentError};
 
 /// Pushover API request <https://pushover.net/api#messages>
 #[derive(Default, Debug)]
-pub struct Request<'a> {
-    token: Cow<'a, str>,
-    user: Cow<'a, str>,
-    message: Cow<'a, str>,
+pub struct Request {
+    token: String,
+    user: String,
+    message: String,
     /// your user's device name to send the message directly to that device, rather than all of the user's devices (multiple devices may be separated by a comma) <https://pushover.net/api#identifiers>
-    pub device: Option<Cow<'a, str>>,
+    pub device: Option<String>,
     /// your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
-    pub title: Option<Cow<'a, str>>,
+    pub title: Option<String>,
     /// To enable HTML formatting <https://pushover.net/api#html>
     pub html: Option<HTML>,
     /// To enable monospace messages <https://pushover.net/api#html>
@@ -41,9 +39,9 @@ pub struct Request<'a> {
     /// Messages may be sent with a different priority that affects how the message is presented to the user <https://pushover.net/api#priority>
     pub priority: Option<Priority>,
     /// a supplementary URL to show with your message <https://pushover.net/api#urls>
-    pub url: Option<Cow<'a, str>>,
+    pub url: Option<String>,
     /// a title for your supplementary URL, otherwise just the URL is shown <https://pushover.net/api#urls>
-    pub url_title: Option<Cow<'a, str>>,
+    pub url_title: Option<String>,
     /// Users can choose from a number of different default sounds to play when receiving notifications <https://pushover.net/api#sounds>
     pub sound: Option<Sound>,
 }
@@ -160,7 +158,7 @@ pub enum NotificationError {
 #[derive(Default, Debug)]
 pub struct Notification<'a> {
     /// Actual request sent to Pushover API
-    pub request: Request<'a>,
+    pub request: Request,
     attachment: Option<&'a Attachment>,
 }
 

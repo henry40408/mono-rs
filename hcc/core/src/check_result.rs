@@ -160,7 +160,7 @@ impl<'a> fmt::Display for CheckResult<'a> {
 
         s.push_str(&self.state_icon(false));
 
-        s.push_str(&" ");
+        s.push(' ');
 
         s.push_str(&self.sentence());
 

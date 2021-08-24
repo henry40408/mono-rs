@@ -47,7 +47,7 @@ async fn show_domain_name(
         let json = CheckResultJSON::new(results.first().unwrap());
         HttpResponse::Ok().json(&json)
     } else {
-        let json: Vec<CheckResultJSON> = results.iter().map(|r| CheckResultJSON::new(&r)).collect();
+        let json: Vec<CheckResultJSON> = results.iter().map(CheckResultJSON::new).collect();
         HttpResponse::Ok().json(&json)
     }
 }
