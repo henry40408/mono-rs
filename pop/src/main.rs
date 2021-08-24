@@ -14,16 +14,17 @@
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use env_logger::Env;
-use log::warn;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
-use warp::http::StatusCode;
 use warp::Filter;
 
-use pushover::{Attachment, Notification, Priority, Response, Sound, HTML};
+use pushover::{Attachment, Notification, Priority, Sound, HTML};
+use warp::http::StatusCode;
 
 #[derive(StructOpt)]
 #[structopt(about, author)]
@@ -83,31 +84,86 @@ fn check_authorization(expected: &Option<String>, actual: &Option<String>) -> Au
     }
 }
 
+#[derive(Debug)]
+enum Rejection {
+    Unauthorized,
+    BadRequest(String),
+    Parse(String),
+}
+
+impl warp::reject::Reject for Rejection {}
+
 async fn send_notification(
     opts: Arc<Opts>,
     actual: Option<String>,
     message: &Message,
-) -> Result<warp::reply::WithStatus<warp::reply::Json>, Infallible> {
+) -> Result<warp::reply::Json, warp::reject::Rejection> {
     match check_authorization(&opts.authorization, &actual) {
-        AuthorizationState::Rejected => Ok(warp::reply::with_status(
-            warp::reply::json(&ErrorJson {
-                error: "unauthorized".to_string(),
-            }),
-            StatusCode::UNAUTHORIZED,
-        )),
+        AuthorizationState::Rejected => Err(warp::reject::custom(Rejection::Unauthorized)),
         AuthorizationState::Public | AuthorizationState::Accepted => {
-            let n = Notification::new(&opts.token, &opts.user, &message.message);
+            let mut n = Notification::new(&opts.token, &opts.user, &message.message);
+
+            if let Some(ref d) = message.device {
+                n.request.device = Some(d.into());
+            }
+
+            if let Some(ref t) = message.title {
+                n.request.title = Some(t.into());
+            }
+
+            if let Some(ref h) = message.html {
+                n.request.html = Some(match HTML::from_str(h) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        return Err(warp::reject::custom(Rejection::Parse(e.to_string())));
+                    }
+                });
+            }
+
+            if let Some(ref t) = message.timestamp {
+                n.request.timestamp = Some(*t);
+            }
+
+            if let Some(ref p) = message.priority {
+                n.request.priority = Some(match Priority::from_str(p) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let e = e.to_string();
+                        return Err(warp::reject::custom(Rejection::Parse(e)));
+                    }
+                })
+            }
+
+            if let Some(ref u) = message.url {
+                n.request.url = Some(u.into());
+                if let Some(ref t) = message.url_title {
+                    n.request.url_title = Some(t.into());
+                }
+            }
+
+            if let Some(ref s) = message.sound {
+                n.request.sound = Some(match Sound::from_str(s) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return Err(warp::reject::custom(Rejection::Parse(e.to_string())));
+                    }
+                });
+            }
+
+            let a;
+            if let Some(ref u) = message.image_url {
+                a = match Attachment::from_url(u).await {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return Err(warp::reject::custom(Rejection::BadRequest(e.to_string())));
+                    }
+                };
+                n.attach(&a);
+            }
+
             match n.send().await {
-                Ok(r) => Ok(warp::reply::with_status(
-                    warp::reply::json(&r),
-                    StatusCode::OK,
-                )),
-                Err(e) => Ok(warp::reply::with_status(
-                    warp::reply::json(&ErrorJson {
-                        error: format!("{:?}", e),
-                    }),
-                    StatusCode::BAD_REQUEST,
-                )),
+                Ok(r) => Ok(warp::reply::json(&r)),
+                Err(e) => Err(warp::reject::custom(Rejection::BadRequest(e.to_string()))),
             }
         }
     }
@@ -151,10 +207,10 @@ mod tests {
             .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
             .create();
         let opts = Arc::new(Opts {
-            token: "".to_string(),
-            user: "".to_string(),
+            token: "".into(),
+            user: "".into(),
             authorization: None,
-            bind: "".to_string(),
+            bind: "".into(),
         });
         let filter = one_messages_filter(opts);
         let res = warp::test::request()
@@ -165,6 +221,30 @@ mod tests {
             .await;
         assert_eq!(200, res.status());
     }
+}
+
+async fn handle_rejection(
+    err: warp::reject::Rejection,
+) -> Result<impl warp::reply::Reply, Infallible> {
+    let status_code;
+    let error;
+
+    if let Some(Rejection::Unauthorized) = err.find() {
+        status_code = StatusCode::UNAUTHORIZED;
+        error = "unauthorized".into();
+    } else if let Some(Rejection::BadRequest(ref s)) = err.find() {
+        status_code = StatusCode::BAD_REQUEST;
+        error = s.into();
+    } else {
+        eprintln!("{:?}", err);
+        status_code = StatusCode::INTERNAL_SERVER_ERROR;
+        error = "unknown error".into();
+    }
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&ErrorJson { error }),
+        status_code,
+    ))
 }
 
 #[tokio::main]
@@ -178,9 +258,10 @@ async fn main() -> anyhow::Result<()> {
 
     let opts = Arc::new(opts);
     let filter = one_messages_filter(opts.clone());
-    let app = filter.with(warp::log("pop"));
+    let app = filter.recover(handle_rejection).with(warp::log("pop"));
 
     let bind: SocketAddr = opts.bind.parse()?;
+    info!("running on {}", opts.bind);
     warp::serve(app).bind(bind).await;
 
     Ok(())
