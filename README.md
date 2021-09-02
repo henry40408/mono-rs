@@ -10,6 +10,7 @@
 2. [hcc](hcc/README.md) **H**TTPS **C**ertificate **C**heck
 3. [pop](pop/README.md) **P**ush**O**ver **P**roxy
 4. [pushover](pushover/README.md) Pushover API wrapper with attachment support in Rust 2018 edition
+5. [wfs](wfs/README.md) **W**ait **F**or **S**ignal
 
 ## Contributing
 
