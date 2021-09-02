@@ -8,7 +8,9 @@ authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ammonia = "3"
 infer = "0.5"
+maplit = "1"
 reqwest = { version = "0.11", default-features = false, features = ["multipart", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

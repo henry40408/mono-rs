@@ -12,6 +12,7 @@
 
 //! Pushover is Pushover API wrapper with attachment support in Rust 2018 edition
 
+use maplit::{hashmap, hashset};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -191,12 +192,26 @@ impl<'a> Notification<'a> {
         self.attachment = Some(attachment);
     }
 
+    /// Sanitize message in [`Request`]
+    pub fn sanitized_message(&'a self) -> String {
+        let tags = hashset!["b", "i", "u", "font", "a"];
+        let tag_attrs = hashmap![
+            "a"=>hashset!["href"],
+            "font"=>hashset!["color"],
+        ];
+        ammonia::Builder::default()
+            .tags(tags)
+            .tag_attributes(tag_attrs)
+            .clean(&self.request.message)
+            .to_string()
+    }
+
     /// Send [`Request`] to Pushover API
     pub async fn send(&'a self) -> Result<Response, NotificationError> {
         let form = multipart::Form::new()
             .text("token", self.request.token.to_string())
             .text("user", self.request.user.to_string())
-            .text("message", self.request.message.to_string());
+            .text("message", self.sanitized_message());
 
         let form = Self::append_part(form, "device", self.request.device.as_ref());
         let form = Self::append_part(form, "title", self.request.title.as_ref());
@@ -435,5 +450,35 @@ mod tests {
         assert_eq!(1, res.status);
         assert_eq!("647d2300-702c-4b38-8b2f-d56326ae460b", res.request);
         Ok(())
+    }
+
+    #[test]
+    fn test_sanitized_message() {
+        let mut n = build_notification();
+
+        let s = "<b>bold</b>";
+        n.request.message = s.into();
+        assert_eq!(s, n.sanitized_message());
+
+        let s = "<i>italic</i>";
+        n.request.message = s.into();
+        assert_eq!(s, n.sanitized_message());
+
+        let s = "<u>underline</u>";
+        n.request.message = s.into();
+        assert_eq!(s, n.sanitized_message());
+
+        let s = "<font color=\"#000000\">font</font>";
+        n.request.message = s.into();
+        assert_eq!(s, n.sanitized_message());
+
+        n.request.message = "<a href=\"https://badssl.com/\">link</a>".into();
+        assert_eq!(
+            "<a href=\"https://badssl.com/\" rel=\"noopener noreferrer\">link</a>",
+            n.sanitized_message()
+        );
+
+        n.request.message = "<script>alert('XSS');</script>".into();
+        assert_eq!("", n.sanitized_message());
     }
 }
