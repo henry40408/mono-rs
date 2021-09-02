@@ -2691,6 +2691,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wfs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "env_logger",
+ "log",
+ "tokio",
+]
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
