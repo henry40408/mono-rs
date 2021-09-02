@@ -1,0 +1,14 @@
+[package]
+name = "wfs"
+version = "0.1.0"
+authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
+edition = "2018"
+description = "A tiny CLI wait for signal forever"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+env_logger = "0.9"
+log = "0.4"
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "signal"] }
