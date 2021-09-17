@@ -4,7 +4,9 @@
 
 # Features
 
-> None
+- Wait for signal
+- Single executable as an entrypoint of Docker image
+- UNIX platform supported only
 
 ## Contributing
 

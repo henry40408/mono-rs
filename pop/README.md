@@ -14,13 +14,13 @@
 ```bash
 $ export PUSHOVER_TOKEN=[Pushover API token]
 $ export PUSHOVER_USER=[Pushover user key]
-$ cargo run
+$ pop
 ```
 
 ### Help
 
 ```bash
-cargo run -- -h
+pop -h
 ```
 
 ## Contributing

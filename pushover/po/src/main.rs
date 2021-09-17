@@ -10,7 +10,7 @@
     unused_qualifications
 )]
 
-//! po is a command line application based on Pullover
+//! po is a command line application based on Pushover API
 
 use pushover::{Attachment, Monospace, Notification, Priority, Sound, HTML};
 use std::path::PathBuf;

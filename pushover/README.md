@@ -1,4 +1,4 @@
-# Pullover
+# Pushover
 
 > Pushover API with attachment support in Rust 2018 edition
 

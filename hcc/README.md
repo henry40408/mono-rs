@@ -13,13 +13,13 @@
 ### CLI
 
 ```bash
-$ cargo run --bin hcc -- check httpbin.org
+hcc check httpbin.org
 ```
 
 ### Server
 
 ```bash
-$ cargo run --bin hcc-server
+hcc-server
 ```
 
 Usage:
@@ -41,7 +41,7 @@ $ curl :9292/sha512.badssl.com,expired.badssl.com
 $ export DOMAIN_NAMES=www.example.com,sha512.badssl.com
 $ export PUSHOVER_TOKEN=[Pushover API token]
 $ export PUSHOVER_USER=[Pushover user key]
-$ cargo run --bin hcc-pushover
+$ hcc-pushover
 ```
 
 ## Contributing
