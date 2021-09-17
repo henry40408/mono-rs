@@ -16,7 +16,7 @@
 $ export CLOUDFLARE_TOKEN=[your Cloudflare token]
 $ export CLOUDFLARE_ZONE=[name of your zone on Cloudflare]
 $ export CLOUDFLARE_RECORDS=[name of DNS records on Cloudflare, separated by comma]
-$ cargo run
+$ cdu
 ```
 
 ### Daemon
@@ -25,13 +25,13 @@ $ cargo run
 $ export CLOUDFLARE_TOKEN=[your Cloudflare token]
 $ CLOUDFLARE_ZONE=[name of your zone on Cloudflare]
 $ CLOUDFLARE_RECORDS=[name of DNS records on Cloudflare, separated by comma]
-$ cargo run -- --daemon true
+$ cdu --daemon true
 ```
 
 ### Help
 
 ```bash
-cargo run -- -h
+cdu -h
 ```
 
 ## Contributing
