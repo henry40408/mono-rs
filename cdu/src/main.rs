@@ -29,10 +29,9 @@ use env_logger::Env;
 async fn main() -> anyhow::Result<()> {
     let opts: Opts = Opts::from_args();
 
-    let cdu = Cdu::new(opts);
+    let cdu = Cdu::new(&opts);
 
-    let default_level = if cdu.is_debug() { "debug" } else { "info" };
-    env_logger::Builder::from_env(Env::default().default_filter_or(default_level)).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     if cdu.is_daemon() {
         run_daemon(cdu).await?;
@@ -43,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_daemon(cdu: Cdu) -> anyhow::Result<()> {
+async fn run_daemon<'a>(cdu: Cdu<'_>) -> anyhow::Result<()> {
     let cdu = Arc::new(cdu);
     let schedule = Schedule::from_str(cdu.cron())?;
     for datetime in schedule.upcoming(chrono::Utc) {

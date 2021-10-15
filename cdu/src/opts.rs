@@ -13,9 +13,6 @@ pub struct Opts {
     /// Cloudflare records separated with comma e.g. a.x.com,b.x.com
     #[structopt(short, long, env = "CLOUDFLARE_RECORDS")]
     records: String,
-    /// Debug mode
-    #[structopt(long)]
-    pub(crate) debug: bool,
     /// Daemon mode
     #[structopt(short, long, env = "DAEMON")]
     pub(crate) daemon: bool,

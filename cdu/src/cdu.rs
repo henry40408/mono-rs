@@ -24,20 +24,20 @@ const ZONE: u8 = 1;
 const RECORD: u8 = 2;
 
 /// Cloudflare DNS Update
-pub struct Cdu {
-    opts: Opts,
+pub struct Cdu<'a> {
+    opts: &'a Opts,
     cache: Arc<Mutex<TtlCache<(u8, String), String>>>,
 }
 
-impl std::fmt::Debug for Cdu {
+impl<'a> std::fmt::Debug for Cdu<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Cdu {{ opts: {:?} }}", self.opts)
     }
 }
 
-impl Cdu {
+impl<'a> Cdu<'a> {
     /// Creates an [`Cdu`]
-    pub fn new(opts: Opts) -> Self {
+    pub fn new(opts: &'a Opts) -> Self {
         let capacity = opts.record_name_list().len();
         Self {
             opts,
@@ -57,11 +57,6 @@ impl Cdu {
     /// Cron syntax from argument parser
     pub fn cron(&self) -> &str {
         &self.opts.cron
-    }
-
-    /// Is debug mode enabled?
-    pub fn is_debug(&self) -> bool {
-        self.opts.debug
     }
 
     /// Is daemon mode enabled?
@@ -107,10 +102,7 @@ impl Cdu {
         Ok((duration, id))
     }
 
-    /// Perform DNS record update on Cloudflare
-    pub async fn run(&self) -> anyhow::Result<()> {
-        let ip_address = public_ip::addr_v4().await.ok_or(PublicIPError)?;
-
+    fn build_client(&self) -> anyhow::Result<Client> {
         let credentials = Credentials::UserAuthToken {
             token: self.opts.token.clone(),
         };
@@ -118,10 +110,16 @@ impl Cdu {
             http_timeout: Duration::from_secs(HTTP_TIMEOUT),
             ..Default::default()
         };
-        let client = Arc::new(Client::new(credentials, config, Environment::Production)?);
+        Client::new(credentials, config, Environment::Production)
+    }
+
+    /// Perform DNS record update on Cloudflare
+    pub async fn run(&self) -> anyhow::Result<()> {
+        let ip_address = public_ip::addr_v4().await.ok_or(PublicIPError)?;
 
         debug!("public IPv4 address: {}", &ip_address);
 
+        let client = Arc::new(self.build_client()?);
         let (duration1, zone_id) = self.get_zone_identifier(client.clone()).await?;
 
         let mut tasks = vec![];

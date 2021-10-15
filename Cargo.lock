@@ -205,7 +205,7 @@ checksum = "d26a6ce4b6a484fa3edb70f7efa6fc430fd2b87285fe8b84304fd0936faa0dc0"
 
 [[package]]
 name = "cdu"
-version = "0.2.2"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
