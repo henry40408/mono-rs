@@ -71,14 +71,14 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Result<()> {
-    let check_client = CheckClient::new();
-    let results = check_client.check_certificates(domain_names).await?;
+    let check_client = CheckClient::default();
+    let results = check_client.check_many(domain_names).await?;
 
-    let mut futs = vec![];
+    let mut tasks = vec![];
 
     for result in results {
         let r = Arc::new(result);
-        futs.push(async move {
+        tasks.push(async move {
             let title = format!("HTTP Certificate Check - {}", r.domain_name);
 
             let state_icon = r.state_icon(true);
@@ -93,7 +93,7 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
         });
     }
 
-    futures::future::try_join_all(futs).await?;
+    futures::future::try_join_all(tasks).await?;
 
     Ok(())
 }

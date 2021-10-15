@@ -63,12 +63,11 @@ async fn check_command(
     domain_names: &[&str],
     grace_in_days: i64,
 ) -> anyhow::Result<()> {
-    let client = CheckClient::builder()
-        .elapsed(opts.verbose)
-        .grace_in_days(grace_in_days)
-        .build();
+    let mut client = CheckClient::default();
+    client.elapsed = opts.verbose;
+    client.grace_in_days = grace_in_days;
 
-    let results = client.check_certificates(domain_names).await?;
+    let results = client.check_many(domain_names).await?;
 
     if opts.json {
         let s = if results.len() > 1 {

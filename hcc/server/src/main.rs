@@ -48,11 +48,7 @@ async fn check_domain_names(
     domain_names: String,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let domain_names: Vec<&str> = domain_names.split(',').map(|s| s.trim()).collect();
-    let results = match state
-        .client
-        .check_certificates(domain_names.as_slice())
-        .await
-    {
+    let results = match state.client.check_many(domain_names.as_slice()).await {
         Ok(r) => r,
         Err(e) => return Err(warp::reject::custom(Rejection::BadRequest(e.to_string()))),
     };
@@ -87,9 +83,9 @@ mod tests {
     use crate::{domain_names_filter, AppState};
 
     fn build_state() -> Arc<AppState> {
-        Arc::new(AppState {
-            client: CheckClient::builder().elapsed(true).build(),
-        })
+        let mut client = CheckClient::default();
+        client.elapsed = true;
+        Arc::new(AppState { client })
     }
 
     #[tokio::test]
@@ -130,9 +126,11 @@ async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let opts: Opts = Opts::from_args();
-    let state = Arc::new(AppState {
-        client: CheckClient::builder().elapsed(true).build(),
-    });
+
+    let mut client = CheckClient::default();
+    client.elapsed = true;
+
+    let state = Arc::new(AppState { client });
 
     let filter = domain_names_filter(state);
     let app = filter

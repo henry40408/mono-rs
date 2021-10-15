@@ -1,6 +1,6 @@
 [package]
 name = "hcc"
-version = "0.1.1"
+version = "1.0.0"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2018"
 description = "HTTPS Certificate Check"

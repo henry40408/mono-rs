@@ -12,7 +12,7 @@
 
 //! HTTPS Certificate Check
 
-pub use check_client::{CheckClient, CheckClientBuilder};
+pub use check_client::CheckClient;
 pub use check_result::{CheckResult, CheckResultJSON, CheckState};
 
 mod check_client;
