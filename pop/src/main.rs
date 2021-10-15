@@ -104,11 +104,11 @@ async fn send_notification(
             let mut n = Notification::new(&opts.token, &opts.user, &message.message);
 
             if let Some(ref d) = message.device {
-                n.request.device = Some(d.into());
+                n.request.device = Some(d);
             }
 
             if let Some(ref t) = message.title {
-                n.request.title = Some(t.into());
+                n.request.title = Some(t);
             }
 
             if let Some(ref h) = message.html {
@@ -135,9 +135,9 @@ async fn send_notification(
             }
 
             if let Some(ref u) = message.url {
-                n.request.url = Some(u.into());
+                n.request.url = Some(u);
                 if let Some(ref t) = message.url_title {
-                    n.request.url_title = Some(t.into());
+                    n.request.url_title = Some(t);
                 }
             }
 
