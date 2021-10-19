@@ -1,6 +1,6 @@
 [package]
 name = "hcc"
-version = "1.0.1"
+version = "1.0.2"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2021"
 description = "HTTPS Certificate Check"
@@ -17,7 +17,7 @@ serde = { version = "1", features = ["derive"] }
 serde_derive = "1"
 serde_json = "1"
 structopt = "0.3"
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 webpki = "0.22"
 webpki-roots = "0.22"
 x509-parser = "0.12"
