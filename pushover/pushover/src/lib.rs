@@ -178,9 +178,9 @@ impl<'a> Notification<'a> {
     pub fn new(token: &'a str, user: &'a str, message: &'a str) -> Self {
         Self {
             request: Request {
-                token: token.into(),
-                user: user.into(),
-                message: message.into(),
+                token,
+                user,
+                message,
                 ..Default::default()
             },
             ..Default::default()
@@ -202,7 +202,7 @@ impl<'a> Notification<'a> {
         ammonia::Builder::default()
             .tags(tags)
             .tag_attributes(tag_attrs)
-            .clean(&self.request.message)
+            .clean(self.request.message)
             .to_string()
     }
 
