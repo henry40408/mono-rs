@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bk",
     "cdu",
     "hcc/core",
     "hcc/pushover",
