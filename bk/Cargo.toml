@@ -8,3 +8,6 @@ description = "Bookmark or bucket service"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
+failure = "0.1"
+headless_chrome = { git = "https://github.com/atroche/rust-headless-chrome", rev = "7a7e2ac" }
