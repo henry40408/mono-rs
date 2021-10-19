@@ -15,8 +15,10 @@ use std::time::Instant;
 pub struct CheckClient {
     checked_at: DateTime<Utc>,
     config: Arc<ClientConfig>,
-    elapsed: bool,
-    grace_in_days: i64,
+    /// Show elapsed time in milliseconds?
+    pub elapsed: bool,
+    /// Grace period before certificate actually expires
+    pub grace_in_days: i64,
 }
 
 impl std::fmt::Debug for CheckClient {
@@ -45,37 +47,14 @@ impl Default for CheckClient {
 }
 
 impl CheckClient {
-    /// Create a [`CheckClient`]
-    ///
-    /// ```
-    /// # use hcc::CheckClient;
-    /// let client = CheckClient::new();
-    /// ```
-    pub fn new() -> Self {
-        CheckClient::default()
-    }
-
-    /// Create a [`CheckClient`] with [`CheckClientBuilder`]
-    ///
-    /// ```
-    /// # use hcc::CheckClient;
-    /// let builder = CheckClient::builder();
-    /// ```
-    pub fn builder() -> CheckClientBuilder {
-        CheckClientBuilder::default()
-    }
-
     /// Check SSL certificate of one domain name
     ///
     /// ```
     /// # use hcc::CheckClient;
-    /// let client = CheckClient::new();
-    /// client.check_certificate("sha512.badssl.com");
+    /// let client = CheckClient::default();
+    /// client.check_one("sha512.badssl.com");
     /// ```
-    pub async fn check_certificate<'a>(
-        &'a self,
-        domain_name: &'a str,
-    ) -> anyhow::Result<CheckResult<'a>> {
+    pub async fn check_one<'a>(&'a self, domain_name: &'a str) -> anyhow::Result<CheckResult<'a>> {
         let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain_name)?;
         let mut sess = rustls::ClientSession::new(&self.config, dns_name);
         let mut sock = TcpStream::connect(format!("{0}:443", domain_name))?;
@@ -128,22 +107,22 @@ impl CheckClient {
     ///
     /// ```
     /// # use hcc::CheckClient;
-    /// let client = CheckClient::new();
-    /// client.check_certificates(&["sha256.badssl.com", "sha256.badssl.com"]);
+    /// let client = CheckClient::default();
+    /// client.check_many(&["sha256.badssl.com", "sha256.badssl.com"]);
     /// ```
-    pub async fn check_certificates<'a>(
+    pub async fn check_many<'a>(
         &'a self,
         domain_names: &'a [&str],
     ) -> anyhow::Result<Vec<CheckResult<'a>>> {
         let client = Arc::new(self);
 
-        let mut futs = vec![];
+        let mut tasks = vec![];
         for domain_name in domain_names {
             let client = client.clone();
-            futs.push(client.check_certificate(domain_name));
+            tasks.push(client.check_one(domain_name));
         }
 
-        Ok(futures::future::try_join_all(futs).await?)
+        Ok(futures::future::try_join_all(tasks).await?)
     }
 
     fn build_http_headers(domain_name: &str) -> String {
@@ -160,36 +139,6 @@ impl CheckClient {
     }
 }
 
-/// Builder for [`CheckClient`]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct CheckClientBuilder {
-    elapsed: bool,
-    grace_in_days: i64,
-}
-
-impl CheckClientBuilder {
-    /// Whether to show elapsed time of check
-    pub fn elapsed(&mut self, elapsed: bool) -> &mut Self {
-        self.elapsed = elapsed;
-        self
-    }
-
-    /// Grace period before SSL certificate expires
-    pub fn grace_in_days(&mut self, grace_in_days: i64) -> &mut Self {
-        self.grace_in_days = grace_in_days;
-        self
-    }
-
-    /// Build a [`CheckClient`]
-    pub fn build(&self) -> CheckClient {
-        CheckClient {
-            elapsed: self.elapsed,
-            grace_in_days: self.grace_in_days,
-            ..Default::default()
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use chrono::{TimeZone, Utc};
@@ -201,8 +150,8 @@ mod test {
     async fn test_good_certificate() {
         let now = Utc.timestamp(0, 0);
         let domain_name = "sha512.badssl.com";
-        let client = CheckClient::new();
-        let result = client.check_certificate(domain_name).await.unwrap();
+        let client = CheckClient::default();
+        let result = client.check_one(domain_name).await.unwrap();
         assert!(matches!(result.state, CheckState::Ok));
         assert!(result.checked_at > 0);
         assert!(now < Utc.timestamp(result.not_after, 0));
@@ -211,8 +160,8 @@ mod test {
     #[tokio::test]
     async fn test_bad_certificate() {
         let domain_name = "expired.badssl.com";
-        let client = CheckClient::new();
-        let result = client.check_certificate(domain_name).await.unwrap();
+        let client = CheckClient::default();
+        let result = client.check_one(domain_name).await.unwrap();
         assert!(matches!(result.state, CheckState::Expired));
         assert!(result.checked_at > 0);
         assert_eq!(0, result.not_after);
@@ -221,9 +170,9 @@ mod test {
     #[tokio::test]
     async fn test_check_certificates() -> anyhow::Result<()> {
         let domain_names = vec!["sha512.badssl.com", "expired.badssl.com"];
-        let client = CheckClient::new();
+        let client = CheckClient::default();
 
-        let results = client.check_certificates(domain_names.as_slice()).await?;
+        let results = client.check_many(domain_names.as_slice()).await?;
         assert_eq!(2, results.len());
 
         let result = results.get(0).unwrap();
@@ -239,14 +188,14 @@ mod test {
     async fn test_check_certificate_with_grace_in_days() {
         let domain_name = "sha512.badssl.com";
 
-        let client = CheckClient::new();
-        let result = client.check_certificate(domain_name).await.unwrap();
+        let client = CheckClient::default();
+        let result = client.check_one(domain_name).await.unwrap();
         assert!(matches!(result.state, CheckState::Ok));
 
-        let client = CheckClient::builder()
-            .grace_in_days(result.days + 1)
-            .build();
-        let result = client.check_certificate(domain_name).await.unwrap();
+        let mut client = CheckClient::default();
+        client.grace_in_days = result.days + 1;
+
+        let result = client.check_one(domain_name).await.unwrap();
         assert!(matches!(result.state, CheckState::Warning));
     }
 }

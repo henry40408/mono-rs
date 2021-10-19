@@ -72,10 +72,10 @@ async fn main() -> anyhow::Result<()> {
 
     // set extra options
     if let Some(ref d) = opts.device {
-        notification.request.device = Some(d.into());
+        notification.request.device = Some(d);
     }
     if let Some(ref t) = opts.title {
-        notification.request.title = Some(t.into());
+        notification.request.title = Some(t);
     }
     if let Some(ref t) = opts.timestamp {
         notification.request.timestamp = Some(*t);
@@ -87,9 +87,9 @@ async fn main() -> anyhow::Result<()> {
         notification.request.sound = Some(Sound::from_str(s)?);
     }
     if let Some(ref u) = opts.url {
-        notification.request.url = Some(u.into());
+        notification.request.url = Some(u);
         if let Some(ref t) = opts.url_title {
-            notification.request.url_title = Some(t.into());
+            notification.request.url_title = Some(t);
         }
     }
 

@@ -23,14 +23,14 @@ pub use attachment::{Attachment, AttachmentError};
 
 /// Pushover API request <https://pushover.net/api#messages>
 #[derive(Default, Debug)]
-pub struct Request {
-    token: String,
-    user: String,
-    message: String,
+pub struct Request<'a> {
+    token: &'a str,
+    user: &'a str,
+    message: &'a str,
     /// your user's device name to send the message directly to that device, rather than all of the user's devices (multiple devices may be separated by a comma) <https://pushover.net/api#identifiers>
-    pub device: Option<String>,
+    pub device: Option<&'a str>,
     /// your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
-    pub title: Option<String>,
+    pub title: Option<&'a str>,
     /// To enable HTML formatting <https://pushover.net/api#html>
     pub html: Option<HTML>,
     /// To enable monospace messages <https://pushover.net/api#html>
@@ -40,9 +40,9 @@ pub struct Request {
     /// Messages may be sent with a different priority that affects how the message is presented to the user <https://pushover.net/api#priority>
     pub priority: Option<Priority>,
     /// a supplementary URL to show with your message <https://pushover.net/api#urls>
-    pub url: Option<String>,
+    pub url: Option<&'a str>,
     /// a title for your supplementary URL, otherwise just the URL is shown <https://pushover.net/api#urls>
-    pub url_title: Option<String>,
+    pub url_title: Option<&'a str>,
     /// Users can choose from a number of different default sounds to play when receiving notifications <https://pushover.net/api#sounds>
     pub sound: Option<Sound>,
 }
@@ -159,8 +159,8 @@ pub enum NotificationError {
 #[derive(Default, Debug)]
 pub struct Notification<'a> {
     /// Actual request sent to Pushover API
-    pub request: Request,
-    attachment: Option<&'a Attachment>,
+    pub request: Request<'a>,
+    attachment: Option<&'a Attachment<'a>>,
 }
 
 #[cfg(test)]
@@ -178,9 +178,9 @@ impl<'a> Notification<'a> {
     pub fn new(token: &'a str, user: &'a str, message: &'a str) -> Self {
         Self {
             request: Request {
-                token: token.into(),
-                user: user.into(),
-                message: message.into(),
+                token,
+                user,
+                message,
                 ..Default::default()
             },
             ..Default::default()
@@ -202,7 +202,7 @@ impl<'a> Notification<'a> {
         ammonia::Builder::default()
             .tags(tags)
             .tag_attributes(tag_attrs)
-            .clean(&self.request.message)
+            .clean(self.request.message)
             .to_string()
     }
 
@@ -226,7 +226,7 @@ impl<'a> Notification<'a> {
         let form = if let Some(a) = self.attachment {
             let part = multipart::Part::bytes(a.content.clone())
                 .file_name(a.filename.to_string())
-                .mime_str(a.mime_type.as_str())?;
+                .mime_str(a.mime_type)?;
             form.part("attachment", part)
         } else {
             form

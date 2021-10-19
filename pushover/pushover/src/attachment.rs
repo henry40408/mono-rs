@@ -23,27 +23,27 @@ pub enum AttachmentError {
 
 /// Attachment
 #[derive(Debug)]
-pub struct Attachment {
+pub struct Attachment<'a> {
     /// Required. Filename
     pub(crate) filename: String,
     /// Required. MIME type, inferred when attached from URL
-    pub(crate) mime_type: String,
+    pub(crate) mime_type: &'a str,
     /// Required. Attachment content
     pub(crate) content: Vec<u8>,
 }
 
-impl Attachment {
+impl<'a> Attachment<'a> {
     /// Creates an [`Attachment`]
-    pub fn new(filename: &str, mime_type: &str, content: &[u8]) -> Self {
+    pub fn new(filename: &str, mime_type: &'a str, content: &[u8]) -> Attachment<'a> {
         Self {
             filename: filename.into(),
-            mime_type: mime_type.into(),
+            mime_type,
             content: content.into(),
         }
     }
 
     /// Creates an [`Attachment`] with path
-    pub async fn from_path(path: &Path) -> Result<Self, AttachmentError> {
+    pub async fn from_path(path: &Path) -> Result<Attachment<'a>, AttachmentError> {
         let mut buffer = Vec::new();
         let mut handle = File::open(path)?;
         handle.read_to_end(&mut buffer)?;
@@ -55,26 +55,19 @@ impl Attachment {
     }
 
     /// Creates an [`Attachment`] with URL
-    pub async fn from_url(url: &str) -> Result<Self, AttachmentError> {
+    pub async fn from_url(url: &str) -> Result<Attachment<'a>, AttachmentError> {
         let parsed = Url::parse(url)?;
         let filename = parsed
             .path_segments()
             .map_or("filename", |t| t.last().map_or("filename", |t1| t1));
-
         let res = reqwest::get(url).await?;
         let res = match res.error_for_status() {
             Ok(r) => r,
             Err(e) => return Err(AttachmentError::Reqwest(e)),
         };
         let buffer = res.bytes().await?.to_vec();
-
         let mime_type = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
-
-        Ok(Self {
-            filename: filename.to_string(),
-            mime_type: mime_type.to_string(),
-            content: buffer,
-        })
+        Ok(Self::new(filename, mime_type.mime_type(), &buffer))
     }
 }
 
