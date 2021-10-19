@@ -1,10 +1,11 @@
+use std::convert::TryFrom;
 use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use rustls::{ClientConfig, Session};
+use rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
 use x509_parser::parse_x509_certificate;
 
 use crate::check_result::{CheckResult, CheckState};
@@ -33,10 +34,20 @@ impl std::fmt::Debug for CheckClient {
 
 impl Default for CheckClient {
     fn default() -> CheckClient {
-        let mut config = rustls::ClientConfig::new();
-        config
-            .root_store
-            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+        let mut root_store = rustls::RootCertStore::empty();
+        root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+            OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        }));
+
+        let config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
         CheckClient {
             checked_at: Utc::now().round_subsecs(0),
             config: Arc::new(config),
@@ -55,10 +66,13 @@ impl CheckClient {
     /// client.check_one("sha512.badssl.com");
     /// ```
     pub async fn check_one<'a>(&'a self, domain_name: &'a str) -> anyhow::Result<CheckResult<'a>> {
-        let dns_name = webpki::DNSNameRef::try_from_ascii_str(domain_name)?;
-        let mut sess = rustls::ClientSession::new(&self.config, dns_name);
-        let mut sock = TcpStream::connect(format!("{0}:443", domain_name))?;
-        let mut tls = rustls::Stream::new(&mut sess, &mut sock);
+        let server_name = match ServerName::try_from(domain_name) {
+            Ok(s) => s,
+            Err(_e) => bail!("invalid domain name"),
+        };
+        let mut conn = rustls::ClientConnection::new(self.config.clone(), server_name)?;
+        let mut stream = TcpStream::connect(format!("{0}:443", domain_name))?;
+        let mut tls = rustls::Stream::new(&mut conn, &mut stream);
 
         let origin = Instant::now();
         match tls.write(Self::build_http_headers(domain_name).as_bytes()) {
@@ -68,8 +82,8 @@ impl CheckClient {
         let elapsed = Instant::now() - origin;
 
         let certificates = tls
-            .sess
-            .get_peer_certificates()
+            .conn
+            .peer_certificates()
             .with_context(|| format!("no peer certificates found for {0}", domain_name))?;
 
         let certificate = certificates
