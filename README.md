@@ -6,11 +6,12 @@
 
 ## Projects
 
-1. [cdu](cdu/README.md) **C**loudflare **D**NS **U**pdate
-2. [hcc](hcc/README.md) **H**TTPS **C**ertificate **C**heck
-3. [pop](pop/README.md) **P**ush**O**ver **P**roxy
-4. [pushover](pushover/README.md) Pushover API wrapper with attachment support in Rust 2021 edition
-5. [wfs](wfs/README.md) **W**ait **F**or **S**ignal
+1. [bk](bk/README.md) **B**ookmar**K** or **B**uc**K**et service
+2. [cdu](cdu/README.md) **C**loudflare **D**NS **U**pdate
+3. [hcc](hcc/README.md) **H**TTPS **C**ertificate **C**heck
+4. [pop](pop/README.md) **P**ush**O**ver **P**roxy
+5. [pushover](pushover/README.md) Pushover API wrapper with attachment support in Rust 2021 edition
+6. [wfs](wfs/README.md) **W**ait **F**or **S**ignal
 
 ## Contributing
 
