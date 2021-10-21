@@ -14,21 +14,35 @@
 
 use failure::bail;
 use headless_chrome::Browser;
+use scraper::{Html, Selector};
 
 /// Document to be scraped
 #[derive(Debug)]
 pub struct NewDocument<'a> {
     url: &'a str,
+    /// Scrape with headless Chrome
+    pub headless: bool,
 }
 
 impl<'a> NewDocument<'a> {
     /// Scrape document with URL
     pub fn from_url(url: &'a str) -> Self {
-        Self { url }
+        Self {
+            url,
+            headless: false,
+        }
     }
 
     /// Scrap HTML with URL
-    pub fn scrape(&self) -> failure::Fallible<Document> {
+    pub async fn scrape(&'a self) -> failure::Fallible<Document<'a>> {
+        if self.headless {
+            self.scrape_with_headless_chrome()
+        } else {
+            self.scrape_wo_headless_chrome().await
+        }
+    }
+
+    fn scrape_with_headless_chrome(&self) -> failure::Fallible<Document> {
         let browser = Browser::default()?;
         let tab = browser.wait_for_initial_tab()?;
         tab.navigate_to(self.url)?;
@@ -64,6 +78,24 @@ impl<'a> NewDocument<'a> {
             html,
         })
     }
+
+    async fn scrape_wo_headless_chrome(&'a self) -> failure::Fallible<Document<'a>> {
+        let res = reqwest::get(self.url).await?;
+        let html = res.text().await?;
+
+        let parsed = Html::parse_document(&html);
+        let selector = Selector::parse("title").unwrap();
+
+        let title = match parsed.select(&selector).next() {
+            None => bail!("empty title"),
+            Some(t) => t.text().collect::<Vec<_>>().join(""),
+        };
+        Ok(Document {
+            params: self,
+            title,
+            html,
+        })
+    }
 }
 
 /// Scraped document
@@ -80,10 +112,22 @@ pub struct Document<'a> {
 mod test {
     use crate::NewDocument;
 
-    #[test]
-    fn test_scrape() -> failure::Fallible<()> {
+    #[tokio::test]
+    async fn test_scrape_with_headless_chrome() -> failure::Fallible<()> {
+        let mut new_doc = NewDocument::from_url("https://www.example.com");
+        new_doc.headless = true;
+
+        let doc = new_doc.scrape().await?;
+        assert_eq!("https://www.example.com", doc.params.url);
+        assert!(doc.title.contains("Example Domain"));
+        assert!(doc.html.contains("Example Domain"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_scrape_wo_headless_chrome() -> failure::Fallible<()> {
         let new_doc = NewDocument::from_url("https://www.example.com");
-        let doc = new_doc.scrape()?;
+        let doc = new_doc.scrape().await?;
         assert_eq!("https://www.example.com", doc.params.url);
         assert!(doc.title.contains("Example Domain"));
         assert!(doc.html.contains("Example Domain"));
