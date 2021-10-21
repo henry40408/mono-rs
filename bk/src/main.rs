@@ -30,13 +30,14 @@ enum Commands {
     },
 }
 
-fn main() -> Fallible<()> {
+#[tokio::main]
+async fn main() -> Fallible<()> {
     let commands = Commands::from_args();
     match commands {
         Commands::Scrape { urls, .. } => {
             for url in urls {
                 let new_doc = NewDocument::from_url(&url);
-                let doc = new_doc.scrape()?;
+                let doc = new_doc.scrape().await?;
                 println!("{}", doc.html);
             }
         }
