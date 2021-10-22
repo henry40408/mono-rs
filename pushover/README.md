@@ -1,10 +1,10 @@
 # Pushover
 
-> Pushover API with attachment support in Rust 2018 edition
+> Pushover API with attachment support in Rust 2021 edition
 
 # Features
 
-- Rust 2018 edition
+- Rust 2021 edition
 - Asynchronous
 - Supports [attachment](https://pushover.net/api#attachments)
 

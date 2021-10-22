@@ -10,7 +10,7 @@
     unused_qualifications
 )]
 
-//! Pushover is Pushover API wrapper with attachment support in Rust 2018 edition
+//! Pushover is Pushover API wrapper with attachment support in Rust 2021 edition
 
 use maplit::{hashmap, hashset};
 use reqwest::multipart;
