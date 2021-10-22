@@ -11,6 +11,7 @@ description = "Bookmark or bucket service"
 anyhow = "1"
 failure = "0.1"
 headless_chrome = "0.9"
+infer = "0.5"
 reqwest = { version = "0.11", default-features = false, features = ["multipart", "rustls-tls"] }
 scraper = "0.12"
 serde_json = "1"

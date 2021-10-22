@@ -12,7 +12,7 @@
 
 //! Bookmark or bucket service
 
-use bk::NewDocument;
+use bk::{NewScrape, Scraped};
 use failure::Fallible;
 use structopt::StructOpt;
 
@@ -36,9 +36,18 @@ async fn main() -> Fallible<()> {
     match commands {
         Commands::Scrape { urls, .. } => {
             for url in urls {
-                let new_doc = NewDocument::from_url(&url);
-                let doc = new_doc.scrape().await?;
-                println!("{}", doc.html);
+                let new_doc = NewScrape::from_url(&url);
+                let scraped = new_doc.scrape().await?;
+                if let Scraped::Document(ref doc) = scraped {
+                    println!("{}", doc.html);
+                }
+                if let Scraped::Blob(ref blob) = scraped {
+                    eprintln!(
+                        "binary content, MIME type = {}, content length = {}",
+                        blob.mime_type.mime_type(),
+                        blob.content.len()
+                    );
+                }
             }
         }
     }
