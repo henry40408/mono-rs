@@ -9,6 +9,8 @@ description = "Bookmark or bucket service"
 
 [dependencies]
 anyhow = "1"
+diesel = { version = "1.4", features = ["postgres"] }
+dotenv = "0.15"
 failure = "0.1"
 headless_chrome = "0.9"
 infer = "0.5"

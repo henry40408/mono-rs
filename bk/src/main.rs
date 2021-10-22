@@ -12,7 +12,7 @@
 
 //! Bookmark or bucket service
 
-use bk::{NewScrape, Scraped};
+use bk::{connect_database, NewScrape, Scrape, Scraped};
 use failure::Fallible;
 use structopt::StructOpt;
 
@@ -22,34 +22,64 @@ enum Commands {
     /// Scrape web page with URL
     Scrape {
         #[structopt(long)]
-        /// Scrape with Headless Chrome?
+        /// Scrape with headless Chromium?
         headless: bool,
         #[structopt(name = "URLS")]
         /// URLs to be scraped
         urls: Vec<String>,
     },
+    /// Search URL in database
+    Search {
+        #[structopt(short, long)]
+        /// URL to be searched
+        url: String,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Fallible<()> {
+    dotenv::dotenv().ok();
     let commands = Commands::from_args();
     match commands {
-        Commands::Scrape { urls, .. } => {
-            for url in urls {
-                let new_doc = NewScrape::from_url(&url);
-                let scraped = new_doc.scrape().await?;
-                if let Scraped::Document(ref doc) = scraped {
-                    println!("{}", doc.html);
-                }
-                if let Scraped::Blob(ref blob) = scraped {
-                    eprintln!(
-                        "binary content, MIME type = {}, content length = {}",
-                        blob.mime_type.mime_type(),
-                        blob.content.len()
-                    );
-                }
-            }
+        Commands::Scrape { ref urls, .. } => scrape_command(urls).await?,
+        Commands::Search { ref url } => search_command(url).await?,
+    }
+    Ok(())
+}
+
+async fn scrape_command(urls: &Vec<String>) -> Fallible<()> {
+    for url in urls {
+        let new_doc = NewScrape::from_url(&url);
+        let scraped = new_doc.scrape().await?;
+        if let Scraped::Document(ref doc) = scraped {
+            println!("{}", doc.html);
+        }
+        if let Scraped::Blob(ref blob) = scraped {
+            eprintln!(
+                "binary content, MIME type = {}, content length = {}",
+                blob.mime_type.mime_type(),
+                blob.content.len()
+            );
         }
     }
+    Ok(())
+}
+
+async fn search_command(url_query: &str) -> Fallible<()> {
+    use bk::schema::scrapes::dsl::*;
+    use diesel::prelude::*;
+
+    let connection = connect_database()?;
+    let like = format!("%{}%", url_query);
+
+    let rows: Vec<Scrape> = scrapes
+        .filter(url.like(like))
+        .limit(1)
+        .load::<Scrape>(&connection)?;
+    println!("total {}", rows.len());
+    for row in rows {
+        println!("{}", row.id);
+    }
+
     Ok(())
 }

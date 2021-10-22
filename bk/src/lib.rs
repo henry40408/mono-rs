@@ -12,15 +12,31 @@
 
 //! Bookmark or bucket service
 
-use failure::bail;
+#[macro_use]
+extern crate diesel;
+
+use diesel::{Connection, PgConnection};
+use failure::{bail, Fallible};
 use headless_chrome::Browser;
+use schema::scrapes;
 use scraper::{Html, Selector};
+use std::env;
+use std::time::SystemTime;
+
+#[allow(missing_docs)]
+pub mod schema;
+
+/// Connect to PostgreSQL with environment variable
+pub fn connect_database() -> Fallible<PgConnection> {
+    let uri = env::var("DATABASE_URL").expect("DATABASE is required");
+    Ok(PgConnection::establish(&uri)?)
+}
 
 /// Parameters for scrape
 #[derive(Debug)]
 pub struct NewScrape<'a> {
     url: &'a str,
-    /// Scrape with headless Chrome
+    /// Scrape with headless Chromium
     pub headless: bool,
 }
 
@@ -34,15 +50,15 @@ impl<'a> NewScrape<'a> {
     }
 
     /// Scrap document or blob w/ or w/o headless Chromium
-    pub async fn scrape(&'a self) -> failure::Fallible<Scraped<'a>> {
+    pub async fn scrape(&'a self) -> Fallible<Scraped<'a>> {
         if self.headless {
-            self.scrape_with_headless_chrome()
+            self.scrape_with_headless_chromium()
         } else {
-            self.scrape_wo_headless_chrome().await
+            self.scrape_wo_headless_chromium().await
         }
     }
 
-    fn scrape_with_headless_chrome(&self) -> failure::Fallible<Scraped> {
+    fn scrape_with_headless_chromium(&self) -> Fallible<Scraped> {
         let browser = Browser::default()?;
         let tab = browser.wait_for_initial_tab()?;
         tab.navigate_to(self.url)?;
@@ -79,7 +95,7 @@ impl<'a> NewScrape<'a> {
         }))
     }
 
-    async fn scrape_wo_headless_chrome(&'a self) -> failure::Fallible<Scraped<'a>> {
+    async fn scrape_wo_headless_chromium(&'a self) -> Fallible<Scraped<'a>> {
         let res = reqwest::get(self.url).await?;
         let content = res.bytes().await?;
 
@@ -141,12 +157,28 @@ pub struct Document<'a> {
     pub html: String,
 }
 
+/// Scrape in database
+#[derive(Debug, Queryable, Insertable)]
+pub struct Scrape {
+    /// Primary key
+    pub id: i32,
+    /// URL to be scraped
+    pub url: String,
+    /// Scrape with headless Chromium
+    pub headless: bool,
+    /// Actual content from URL
+    pub content: Vec<u8>,
+    /// When the URL is scraped
+    pub created_at: SystemTime,
+}
+
 #[cfg(test)]
 mod test {
     use crate::{NewScrape, Scraped};
+    use failure::Fallible;
 
     #[tokio::test]
-    async fn test_scrape_with_headless_chrome() -> failure::Fallible<()> {
+    async fn test_scrape_with_headless_chromium() -> Fallible<()> {
         let mut new_doc = NewScrape::from_url("https://www.example.com");
         new_doc.headless = true;
 
@@ -163,7 +195,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_scrape_wo_headless_chrome() -> failure::Fallible<()> {
+    async fn test_scrape_wo_headless_chromium() -> Fallible<()> {
         let new_doc = NewScrape::from_url("https://www.example.com");
 
         let s = new_doc.scrape().await?;
@@ -179,7 +211,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_scrape_image() -> failure::Fallible<()> {
+    async fn test_scrape_image() -> Fallible<()> {
         let new_doc = NewScrape::from_url("https://picsum.photos/1");
 
         let s = new_doc.scrape().await?;
