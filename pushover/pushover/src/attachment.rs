@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+
 use thiserror::Error;
 use url::Url;
 
@@ -73,9 +74,10 @@ impl<'a> Attachment<'a> {
 
 #[cfg(test)]
 mod tests {
+    use mockito::mock;
+
     use crate::server_url;
     use crate::{Attachment, AttachmentError};
-    use mockito::mock;
 
     #[test]
     fn test_attachment_new() {

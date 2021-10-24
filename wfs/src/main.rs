@@ -1,11 +1,8 @@
 use env_logger::Env;
-
 #[cfg(target_os = "windows")]
 use log::error;
-
 #[cfg(not(target_os = "windows"))]
 use log::info;
-
 #[cfg(not(target_os = "windows"))]
 use tokio::signal::unix::{signal, SignalKind};
 
