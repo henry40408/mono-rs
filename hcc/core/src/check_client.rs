@@ -1,7 +1,9 @@
 use std::convert::TryFrom;
+use std::fmt::Formatter;
 use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::{bail, Context};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
@@ -9,8 +11,6 @@ use rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
 use x509_parser::parse_x509_certificate;
 
 use crate::check_result::{CheckResult, CheckState};
-use std::fmt::Formatter;
-use std::time::Instant;
 
 /// Client to check SSL certificate
 pub struct CheckClient {

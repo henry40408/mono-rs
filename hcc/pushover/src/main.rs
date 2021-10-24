@@ -13,18 +13,18 @@
 //! Daemon to send check result to Pushover
 
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
 use chrono::Utc;
 use cron::Schedule;
+use env_logger::Env;
 use log::info;
 use structopt::StructOpt;
 
-use env_logger::Env;
 use hcc::CheckClient;
 use pushover::Notification;
-use std::sync::Arc;
 
 #[derive(Debug, StructOpt)]
 #[structopt(author, about)]

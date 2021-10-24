@@ -1,9 +1,9 @@
 use std::fmt;
+use std::fmt::Formatter;
 
 use chrono::{DateTime, TimeZone, Utc};
 use num_format::{Locale, ToFormattedString};
 use serde::{Deserialize, Serialize};
-use std::fmt::Formatter;
 
 /// State of SSL certificate
 #[derive(Clone, Copy, Debug)]

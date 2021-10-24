@@ -18,12 +18,12 @@ use std::time::{Duration, Instant};
 
 use cloudflare::framework::response::ApiFailure;
 use cron::Schedule;
-use log::info;
+use env_logger::Env;
+use log::{debug, info};
 use structopt::StructOpt;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 
 use cdu::{Cdu, Opts, PublicIPError};
-use env_logger::Env;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,8 +34,10 @@ async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     if cdu.is_daemon() {
+        debug!("run as daemon with cron {}", cdu.cron());
         run_daemon(cdu).await?;
     } else {
+        debug!("run once");
         cdu.run().await?;
     }
 

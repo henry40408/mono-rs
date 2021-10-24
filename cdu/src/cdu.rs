@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::fmt::Formatter;
+use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -16,7 +19,6 @@ use tokio::task::JoinHandle;
 use ttl_cache::TtlCache;
 
 use crate::{Opts, PublicIPError};
-use std::fmt::Formatter;
 
 const HTTP_TIMEOUT: u64 = 30;
 
@@ -27,6 +29,7 @@ const RECORD: u8 = 2;
 pub struct Cdu<'a> {
     opts: &'a Opts,
     cache: Arc<Mutex<TtlCache<(u8, String), String>>>,
+    last_ip: RefCell<Option<Ipv4Addr>>,
 }
 
 impl<'a> std::fmt::Debug for Cdu<'a> {
@@ -43,6 +46,7 @@ impl<'a> Cdu<'a> {
             opts,
             // zone identifier and record identifiers
             cache: Arc::new(Mutex::new(TtlCache::new(capacity + 1))),
+            last_ip: RefCell::new(None),
         }
     }
 
@@ -115,9 +119,23 @@ impl<'a> Cdu<'a> {
 
     /// Perform DNS record update on Cloudflare
     pub async fn run(&self) -> anyhow::Result<()> {
-        let ip_address = public_ip::addr_v4().await.ok_or(PublicIPError)?;
+        let current_ip = public_ip::addr_v4().await.ok_or(PublicIPError)?;
+        debug!("public IPv4 address: {}", &current_ip);
 
-        debug!("public IPv4 address: {}", &ip_address);
+        let last_ip = *self.last_ip.borrow();
+        if let Some(last_ip) = last_ip {
+            debug!(
+                "previous IPv4 address {}, current IPv4 address {}",
+                last_ip, current_ip
+            );
+            if current_ip == last_ip {
+                info!("IPv4 address remains unchanged, skip");
+                return Ok(());
+            }
+        } else {
+            debug!("current IPv4 address {}", current_ip);
+        }
+        *self.last_ip.borrow_mut() = Some(current_ip);
 
         let client = Arc::new(self.build_client()?);
         let (duration1, zone_id) = self.get_zone_identifier(client.clone()).await?;
@@ -179,7 +197,7 @@ impl<'a> Cdu<'a> {
                     params: UpdateDnsRecordParams {
                         name: &record_name,
                         content: DnsContent::A {
-                            content: ip_address,
+                            content: current_ip,
                         },
                         proxied: None,
                         ttl: None,

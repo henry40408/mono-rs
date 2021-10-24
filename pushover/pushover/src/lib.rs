@@ -17,9 +17,9 @@ use reqwest::multipart;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-mod attachment;
-
 pub use attachment::{Attachment, AttachmentError};
+
+mod attachment;
 
 /// Pushover API request <https://pushover.net/api#messages>
 #[derive(Default, Debug)]
@@ -273,8 +273,9 @@ pub struct Response {
 
 #[cfg(test)]
 mod tests {
-    use mockito::mock;
     use std::str::FromStr;
+
+    use mockito::mock;
 
     use crate::attachment::Attachment;
     use crate::{server_url, Monospace, Notification, NotificationError, Priority, Sound, HTML};

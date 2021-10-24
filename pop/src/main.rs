@@ -21,10 +21,10 @@ use env_logger::Env;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
+use warp::http::StatusCode;
 use warp::Filter;
 
 use pushover::{Attachment, Notification, Priority, Sound, HTML};
-use warp::http::StatusCode;
 
 #[derive(StructOpt)]
 #[structopt(about, author)]
