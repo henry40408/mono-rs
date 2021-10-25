@@ -19,13 +19,14 @@ use anyhow::bail;
 use diesel::{Connection, PgConnection};
 use failure::ResultExt;
 use headless_chrome::Browser;
-use schema::scrapes;
 use scraper::{Html, Selector};
 use std::env;
-use std::time::SystemTime;
 
 #[allow(missing_docs)]
 pub mod schema;
+
+/// Database models
+pub mod scrape;
 
 /// Connect to PostgreSQL with environment variable
 pub fn connect_database() -> anyhow::Result<PgConnection> {
@@ -156,21 +157,6 @@ pub struct Document<'a> {
     pub title: String,
     /// Raw HTML document
     pub html: String,
-}
-
-/// Scrape in database
-#[derive(Debug, Queryable, Insertable)]
-pub struct Scrape {
-    /// Primary key
-    pub id: i32,
-    /// URL to be scraped
-    pub url: String,
-    /// Scrape with headless Chromium
-    pub headless: bool,
-    /// Actual content from URL
-    pub content: Vec<u8>,
-    /// When the URL is scraped
-    pub created_at: SystemTime,
 }
 
 #[cfg(test)]

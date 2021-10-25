@@ -12,7 +12,8 @@
 
 //! Bookmark or bucket service
 
-use bk::{connect_database, NewScrape, Scrape, Scraped};
+use bk::scrape::Scrape;
+use bk::{connect_database, NewScrape, Scraped};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
