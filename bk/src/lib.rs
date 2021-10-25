@@ -15,8 +15,9 @@
 #[macro_use]
 extern crate diesel;
 
+use anyhow::bail;
 use diesel::{Connection, PgConnection};
-use failure::{bail, Fallible};
+use failure::ResultExt;
 use headless_chrome::Browser;
 use schema::scrapes;
 use scraper::{Html, Selector};
@@ -27,7 +28,7 @@ use std::time::SystemTime;
 pub mod schema;
 
 /// Connect to PostgreSQL with environment variable
-pub fn connect_database() -> Fallible<PgConnection> {
+pub fn connect_database() -> anyhow::Result<PgConnection> {
     let uri = env::var("DATABASE_URL").expect("DATABASE is required");
     Ok(PgConnection::establish(&uri)?)
 }
@@ -50,7 +51,7 @@ impl<'a> NewScrape<'a> {
     }
 
     /// Scrap document or blob w/ or w/o headless Chromium
-    pub async fn scrape(&'a self) -> Fallible<Scraped<'a>> {
+    pub async fn scrape(&'a self) -> anyhow::Result<Scraped<'a>> {
         if self.headless {
             self.scrape_with_headless_chromium()
         } else {
@@ -58,34 +59,34 @@ impl<'a> NewScrape<'a> {
         }
     }
 
-    fn scrape_with_headless_chromium(&self) -> Fallible<Scraped> {
-        let browser = Browser::default()?;
-        let tab = browser.wait_for_initial_tab()?;
-        tab.navigate_to(self.url)?;
+    fn scrape_with_headless_chromium(&self) -> anyhow::Result<Scraped> {
+        let browser = Browser::default().compat()?;
+        let tab = browser.wait_for_initial_tab().compat()?;
 
-        tab.wait_until_navigated()?; // wait for initial rendering
+        tab.navigate_to(self.url).compat()?;
 
-        let html_e = tab.wait_for_element("html")?;
+        // wait for initial rendering
+        tab.wait_until_navigated().compat()?;
 
-        let html_ro = html_e.call_js_fn(
-            "function () { return document.querySelector('html').outerHTML }",
-            false,
-        )?;
+        let html_e = tab.wait_for_element("html").compat()?;
+
+        let html_ro = html_e
+            .call_js_fn(
+                "function () { return document.querySelector('html').outerHTML }",
+                false,
+            )
+            .compat()?;
         let html = match html_ro.value {
             None => bail!("empty HTML document"),
-            Some(v) => match serde_json::from_value::<String>(v) {
-                Err(_e) => bail!("failed to deserialize HTML"),
-                Ok(h) => h,
-            },
+            Some(v) => serde_json::from_value::<String>(v)?,
         };
 
-        let title_ro = html_e.call_js_fn("function () { return document.title }", false)?;
+        let title_ro = html_e
+            .call_js_fn("function () { return document.title }", false)
+            .compat()?;
         let title = match title_ro.value {
             None => bail!("no title element found"),
-            Some(v) => match serde_json::from_value::<String>(v) {
-                Err(_e) => bail!("failed to deserialize document title"),
-                Ok(t) => t,
-            },
+            Some(v) => serde_json::from_value::<String>(v)?,
         };
 
         Ok(Scraped::Document(Document {
@@ -95,7 +96,7 @@ impl<'a> NewScrape<'a> {
         }))
     }
 
-    async fn scrape_wo_headless_chromium(&'a self) -> Fallible<Scraped<'a>> {
+    async fn scrape_wo_headless_chromium(&'a self) -> anyhow::Result<Scraped<'a>> {
         let res = reqwest::get(self.url).await?;
         let content = res.bytes().await?;
 
@@ -175,10 +176,9 @@ pub struct Scrape {
 #[cfg(test)]
 mod test {
     use crate::{NewScrape, Scraped};
-    use failure::Fallible;
 
     #[tokio::test]
-    async fn test_scrape_with_headless_chromium() -> Fallible<()> {
+    async fn test_scrape_with_headless_chromium() -> anyhow::Result<()> {
         let mut new_doc = NewScrape::from_url("https://www.example.com");
         new_doc.headless = true;
 
@@ -195,7 +195,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_scrape_wo_headless_chromium() -> Fallible<()> {
+    async fn test_scrape_wo_headless_chromium() -> anyhow::Result<()> {
         let new_doc = NewScrape::from_url("https://www.example.com");
 
         let s = new_doc.scrape().await?;
@@ -211,7 +211,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_scrape_image() -> Fallible<()> {
+    async fn test_scrape_image() -> anyhow::Result<()> {
         let new_doc = NewScrape::from_url("https://picsum.photos/1");
 
         let s = new_doc.scrape().await?;

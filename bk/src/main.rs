@@ -13,7 +13,6 @@
 //! Bookmark or bucket service
 
 use bk::{connect_database, NewScrape, Scrape, Scraped};
-use failure::Fallible;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -37,7 +36,7 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Fallible<()> {
+async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
     let commands = Commands::from_args();
     match commands {
@@ -47,9 +46,9 @@ async fn main() -> Fallible<()> {
     Ok(())
 }
 
-async fn scrape_command(urls: &Vec<String>) -> Fallible<()> {
+async fn scrape_command(urls: &[String]) -> anyhow::Result<()> {
     for url in urls {
-        let new_doc = NewScrape::from_url(&url);
+        let new_doc = NewScrape::from_url(url);
         let scraped = new_doc.scrape().await?;
         if let Scraped::Document(ref doc) = scraped {
             println!("{}", doc.html);
@@ -65,7 +64,7 @@ async fn scrape_command(urls: &Vec<String>) -> Fallible<()> {
     Ok(())
 }
 
-async fn search_command(url_query: &str) -> Fallible<()> {
+async fn search_command(url_query: &str) -> anyhow::Result<()> {
     use bk::schema::scrapes::dsl::*;
     use diesel::prelude::*;
 
