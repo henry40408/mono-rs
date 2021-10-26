@@ -1,6 +1,8 @@
-use crate::schema::scrapes;
-use diesel::{PgConnection, RunQueryDsl};
 use std::time::SystemTime;
+
+use diesel::PgConnection;
+
+use crate::schema::scrapes;
 
 /// Scrape in database
 #[derive(Debug, Queryable, Insertable)]
@@ -15,6 +17,33 @@ pub struct Scrape {
     pub content: Vec<u8>,
     /// When the URL is scraped
     pub created_at: SystemTime,
+}
+
+/// Search parameters on scrapes
+#[derive(Debug, Default)]
+pub struct SearchScrape {
+    /// Search URL
+    pub url: Option<String>,
+}
+
+impl Scrape {
+    /// Search scrapes with parameters
+    pub fn search(
+        conn: &PgConnection,
+        params: &SearchScrape,
+    ) -> diesel::result::QueryResult<Vec<Scrape>> {
+        use crate::schema::scrapes::dsl;
+        use diesel::prelude::*;
+
+        let mut query = dsl::scrapes.into_boxed();
+
+        let url = params.url.as_ref().map(|u| format!("%{}%", u));
+        if let Some(url) = url {
+            query = query.filter(dsl::url.eq(url));
+        }
+
+        query.load::<Scrape>(conn)
+    }
 }
 
 /// New scrape to database
@@ -33,6 +62,8 @@ impl NewScrape {
     /// Save scrape
     pub fn save(&self, conn: &PgConnection) -> diesel::result::QueryResult<()> {
         use crate::schema::scrapes::dsl;
+        use diesel::prelude::*;
+
         diesel::insert_into(dsl::scrapes)
             .values(self)
             .execute(conn)?;
@@ -42,27 +73,36 @@ impl NewScrape {
 
 #[cfg(test)]
 mod test {
-    use crate::entities::NewScrape;
-    use crate::{establish_connection, Scraper};
     use diesel::result::Error;
-    use diesel::Connection;
+    use diesel::{Connection, PgConnection};
 
-    fn setup() {
+    use crate::entities::{NewScrape, Scrape, SearchScrape};
+    use crate::{establish_connection, Scraper};
+
+    fn setup() -> anyhow::Result<PgConnection> {
         std::env::set_var(
             "DATABASE_URL",
             "postgres://postgres:@localhost/bk_development",
         );
+        establish_connection()
+    }
+
+    #[tokio::test]
+    async fn test_search() -> anyhow::Result<()> {
+        let conn = setup()?;
+        let scrapes = Scrape::search(&conn, &SearchScrape::default())?;
+        assert_eq!(0, scrapes.len());
+        Ok(())
     }
 
     #[tokio::test]
     async fn test_from_scraped_to_new_scrape() -> anyhow::Result<()> {
-        setup();
+        let conn = setup()?;
 
         let scraper = Scraper::from_url("https://www.example.com");
         let scraped = scraper.scrape().await?;
         let new_scrape = NewScrape::from(scraped);
 
-        let conn = establish_connection()?;
         conn.test_transaction::<_, Error, _>(|| {
             new_scrape.save(&conn)?;
             Ok(())

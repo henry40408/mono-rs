@@ -12,7 +12,7 @@
 
 //! Bookmark or bucket service
 
-use bk::entities::Scrape;
+use bk::entities::{Scrape, SearchScrape};
 use bk::{establish_connection, Scraped, Scraper};
 use structopt::StructOpt;
 
@@ -65,20 +65,16 @@ async fn scrape_command(urls: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn search_command(url_query: &str) -> anyhow::Result<()> {
-    use bk::schema::scrapes::dsl::*;
-    use diesel::prelude::*;
+async fn search_command(url: &str) -> anyhow::Result<()> {
+    let mut params = SearchScrape::default();
+    params.url = Some(url.to_string());
 
     let connection = establish_connection()?;
-    let like = format!("%{}%", url_query);
+    let scrapes = Scrape::search(&connection, &params)?;
 
-    let rows: Vec<Scrape> = scrapes
-        .filter(url.like(like))
-        .limit(1)
-        .load::<Scrape>(&connection)?;
-    println!("total {}", rows.len());
-    for row in rows {
-        println!("{}", row.id);
+    println!("total {}", scrapes.len());
+    for scrape in scrapes {
+        println!("{}", scrape.id);
     }
 
     Ok(())
