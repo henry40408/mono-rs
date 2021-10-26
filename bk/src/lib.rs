@@ -15,6 +15,9 @@
 #[macro_use]
 extern crate diesel;
 
+#[macro_use]
+extern crate diesel_migrations;
+
 use crate::entities::NewScrape;
 use anyhow::bail;
 use diesel::{Connection, PgConnection};
@@ -29,10 +32,17 @@ pub mod schema;
 /// Database models
 pub mod entities;
 
+embed_migrations!();
+
 /// Connect to PostgreSQL with environment variable
 pub fn establish_connection() -> anyhow::Result<PgConnection> {
     let uri = env::var("DATABASE_URL").expect("DATABASE is required");
     Ok(PgConnection::establish(&uri)?)
+}
+
+/// Run database migrations
+pub fn migrate_database(conn: &PgConnection) -> Result<(), diesel_migrations::RunMigrationsError> {
+    embedded_migrations::run(conn)
 }
 
 /// Parameters for scrape

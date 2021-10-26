@@ -13,7 +13,7 @@
 //! Bookmark or bucket service
 
 use bk::entities::{Scrape, SearchScrape};
-use bk::{establish_connection, Scraped, Scraper};
+use bk::{establish_connection, migrate_database, Scraped, Scraper};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -32,13 +32,17 @@ enum Commands {
     Search {
         #[structopt(short, long)]
         /// URL to be searched
-        url: String,
+        url: Option<String>,
     },
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
+
+    let conn = establish_connection()?;
+    migrate_database(&conn)?;
+
     let commands = Commands::from_args();
     match commands {
         Commands::Scrape { ref urls, .. } => scrape_command(urls).await?,
@@ -65,9 +69,10 @@ async fn scrape_command(urls: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn search_command(url: &str) -> anyhow::Result<()> {
-    let mut params = SearchScrape::default();
-    params.url = Some(url.to_string());
+async fn search_command(url: &Option<String>) -> anyhow::Result<()> {
+    let params = SearchScrape {
+        url: url.to_owned(),
+    };
 
     let connection = establish_connection()?;
     let scrapes = Scrape::search(&connection, &params)?;

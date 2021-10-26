@@ -76,6 +76,7 @@ mod test {
     use diesel::result::Error;
     use diesel::{Connection, PgConnection};
 
+    use crate::embedded_migrations;
     use crate::entities::{NewScrape, Scrape, SearchScrape};
     use crate::{establish_connection, Scraper};
 
@@ -84,7 +85,9 @@ mod test {
             "DATABASE_URL",
             "postgres://postgres:@localhost/bk_development",
         );
-        establish_connection()
+        let conn = establish_connection()?;
+        embedded_migrations::run(&conn)?;
+        Ok(conn)
     }
 
     #[tokio::test]
