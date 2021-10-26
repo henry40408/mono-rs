@@ -39,7 +39,7 @@ impl Scrape {
 
         let url = params.url.as_ref().map(|u| format!("%{}%", u));
         if let Some(url) = url {
-            query = query.filter(dsl::url.eq(url));
+            query = query.filter(dsl::url.like(url));
         }
 
         query.load::<Scrape>(conn)
@@ -96,7 +96,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_from_scraped_to_new_scrape() -> anyhow::Result<()> {
+    async fn test_save_and_search() -> anyhow::Result<()> {
         let conn = setup()?;
 
         let scraper = Scraper::from_url("https://www.example.com");
@@ -105,6 +105,13 @@ mod test {
 
         conn.test_transaction::<_, Error, _>(|| {
             new_scrape.save(&conn)?;
+
+            let mut params = SearchScrape::default();
+            params.url = Some("example".into());
+
+            let scrapes = Scrape::search(&conn, &params)?;
+            assert_eq!(1, scrapes.len());
+
             Ok(())
         });
 
