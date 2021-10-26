@@ -13,7 +13,7 @@
 //! Bookmark or bucket service
 
 use bk::entities::Scrape;
-use bk::{connect_database, NewScrape, Scraped};
+use bk::{connect_database, Scraped, Scraper};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn scrape_command(urls: &[String]) -> anyhow::Result<()> {
     for url in urls {
-        let new_doc = NewScrape::from_url(url);
+        let new_doc = Scraper::from_url(url);
         let scraped = new_doc.scrape().await?;
         if let Scraped::Document(ref doc) = scraped {
             println!("{}", doc.html);

@@ -36,13 +36,13 @@ pub fn connect_database() -> anyhow::Result<PgConnection> {
 
 /// Parameters for scrape
 #[derive(Debug)]
-pub struct NewScrape<'a> {
+pub struct Scraper<'a> {
     url: &'a str,
     /// Scrape with headless Chromium
     pub headless: bool,
 }
 
-impl<'a> NewScrape<'a> {
+impl<'a> Scraper<'a> {
     /// Scrape blob or document with URL
     pub fn from_url(url: &'a str) -> Self {
         Self {
@@ -142,7 +142,7 @@ pub enum Scraped<'a> {
 /// Scraped blob
 #[derive(Debug)]
 pub struct Blob<'a> {
-    params: &'a NewScrape<'a>,
+    params: &'a Scraper<'a>,
     /// Inferred MIME type
     pub mime_type: infer::Type,
     /// Blob content
@@ -152,7 +152,7 @@ pub struct Blob<'a> {
 /// Scraped document
 #[derive(Debug)]
 pub struct Document<'a> {
-    params: &'a NewScrape<'a>,
+    params: &'a Scraper<'a>,
     /// Document title
     pub title: String,
     /// Raw HTML document
@@ -161,11 +161,11 @@ pub struct Document<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{NewScrape, Scraped};
+    use crate::{Scraped, Scraper};
 
     #[tokio::test]
     async fn test_scrape_with_headless_chromium() -> anyhow::Result<()> {
-        let mut new_doc = NewScrape::from_url("https://www.example.com");
+        let mut new_doc = Scraper::from_url("https://www.example.com");
         new_doc.headless = true;
 
         let s = new_doc.scrape().await?;
@@ -182,7 +182,7 @@ mod test {
 
     #[tokio::test]
     async fn test_scrape_wo_headless_chromium() -> anyhow::Result<()> {
-        let new_doc = NewScrape::from_url("https://www.example.com");
+        let new_doc = Scraper::from_url("https://www.example.com");
 
         let s = new_doc.scrape().await?;
         assert!(matches!(s, Scraped::Document(_)));
@@ -198,7 +198,7 @@ mod test {
 
     #[tokio::test]
     async fn test_scrape_image() -> anyhow::Result<()> {
-        let new_doc = NewScrape::from_url("https://picsum.photos/1");
+        let new_doc = Scraper::from_url("https://picsum.photos/1");
 
         let s = new_doc.scrape().await?;
         assert!(matches!(s, Scraped::Blob(_)));
