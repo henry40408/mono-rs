@@ -26,7 +26,7 @@ use std::env;
 pub mod schema;
 
 /// Database models
-pub mod scrape;
+pub mod entities;
 
 /// Connect to PostgreSQL with environment variable
 pub fn connect_database() -> anyhow::Result<PgConnection> {

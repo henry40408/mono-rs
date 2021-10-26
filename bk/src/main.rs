@@ -12,7 +12,7 @@
 
 //! Bookmark or bucket service
 
-use bk::scrape::Scrape;
+use bk::entities::Scrape;
 use bk::{connect_database, NewScrape, Scraped};
 use structopt::StructOpt;
 
