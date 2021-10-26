@@ -13,7 +13,7 @@
 //! Bookmark or bucket service
 
 use bk::entities::Scrape;
-use bk::{connect_database, Scraped, Scraper};
+use bk::{establish_connection, Scraped, Scraper};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -69,7 +69,7 @@ async fn search_command(url_query: &str) -> anyhow::Result<()> {
     use bk::schema::scrapes::dsl::*;
     use diesel::prelude::*;
 
-    let connection = connect_database()?;
+    let connection = establish_connection()?;
     let like = format!("%{}%", url_query);
 
     let rows: Vec<Scrape> = scrapes

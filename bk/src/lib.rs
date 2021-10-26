@@ -15,6 +15,7 @@
 #[macro_use]
 extern crate diesel;
 
+use crate::entities::NewScrape;
 use anyhow::bail;
 use diesel::{Connection, PgConnection};
 use failure::ResultExt;
@@ -29,7 +30,7 @@ pub mod schema;
 pub mod entities;
 
 /// Connect to PostgreSQL with environment variable
-pub fn connect_database() -> anyhow::Result<PgConnection> {
+pub fn establish_connection() -> anyhow::Result<PgConnection> {
     let uri = env::var("DATABASE_URL").expect("DATABASE is required");
     Ok(PgConnection::establish(&uri)?)
 }
@@ -159,19 +160,36 @@ pub struct Document<'a> {
     pub html: String,
 }
 
+impl<'a> From<Scraped<'a>> for NewScrape {
+    fn from(scraped: Scraped<'a>) -> Self {
+        match scraped {
+            Scraped::Document(d) => Self {
+                url: d.params.url.to_string(),
+                headless: d.params.headless,
+                content: d.html.into_bytes(),
+            },
+            Scraped::Blob(b) => Self {
+                url: b.params.url.to_string(),
+                headless: b.params.headless,
+                content: b.content.to_vec(),
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{Scraped, Scraper};
 
     #[tokio::test]
     async fn test_scrape_with_headless_chromium() -> anyhow::Result<()> {
-        let mut new_doc = Scraper::from_url("https://www.example.com");
-        new_doc.headless = true;
+        let mut scraper = Scraper::from_url("https://www.example.com");
+        scraper.headless = true;
 
-        let s = new_doc.scrape().await?;
-        assert!(matches!(s, Scraped::Document(_)));
+        let scraped = scraper.scrape().await?;
+        assert!(matches!(scraped, Scraped::Document(_)));
 
-        if let Scraped::Document(doc) = s {
+        if let Scraped::Document(doc) = scraped {
             assert_eq!("https://www.example.com", doc.params.url);
             assert!(doc.title.contains("Example Domain"));
             assert!(doc.html.contains("Example Domain"));
@@ -182,12 +200,12 @@ mod test {
 
     #[tokio::test]
     async fn test_scrape_wo_headless_chromium() -> anyhow::Result<()> {
-        let new_doc = Scraper::from_url("https://www.example.com");
+        let scraper = Scraper::from_url("https://www.example.com");
 
-        let s = new_doc.scrape().await?;
-        assert!(matches!(s, Scraped::Document(_)));
+        let scraped = scraper.scrape().await?;
+        assert!(matches!(scraped, Scraped::Document(_)));
 
-        if let Scraped::Document(doc) = s {
+        if let Scraped::Document(doc) = scraped {
             assert_eq!("https://www.example.com", doc.params.url);
             assert!(doc.title.contains("Example Domain"));
             assert!(doc.html.contains("Example Domain"));
@@ -198,12 +216,12 @@ mod test {
 
     #[tokio::test]
     async fn test_scrape_image() -> anyhow::Result<()> {
-        let new_doc = Scraper::from_url("https://picsum.photos/1");
+        let scraper = Scraper::from_url("https://picsum.photos/1");
 
-        let s = new_doc.scrape().await?;
-        assert!(matches!(s, Scraped::Blob(_)));
+        let scraped = scraper.scrape().await?;
+        assert!(matches!(scraped, Scraped::Blob(_)));
 
-        if let Scraped::Blob(blob) = s {
+        if let Scraped::Blob(blob) = scraped {
             assert_eq!("https://picsum.photos/1", blob.params.url);
             assert!(blob.content.len() > 0);
         }
