@@ -31,30 +31,103 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            toolchain: stable
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            toolchain: stable
+            toolchain: 1.56.0
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             toolchain: nightly
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            toolchain: stable
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            toolchain: stable
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            toolchain: 1.56.0
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            toolchain: nightly
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.56.0
+          target: ${{ matrix.target }}
+          toolchain: ${{ matrix.toolchain }}
           override: true
       - uses: Swatinem/rust-cache@v1
+      - run: cargo install diesel_cli --no-default-features --features postgres
+      - run: diesel database reset
+        working-directory: ./bk
+      - uses: nanasess/setup-chromedriver@v1.0.5
       - uses: actions-rs/cargo@v1
         with:
           command: test
+          args: -p bk
+  test-macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            toolchain: 1.56.0
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            toolchain: nightly
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: ${{ matrix.target }}
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - run: |
+          /usr/local/opt/postgres/bin/pg_ctl -D /usr/local/var/postgres start
+          sleep 3
+          /usr/local/opt/postgres/bin/createuser -s postgres
+          echo "DATABASE_URL=postgres://postgres:root@localhost/bk_development" >> $GITHUB_ENV
+      - run: cargo install diesel_cli --no-default-features --features postgres
+      - run: diesel database reset
+        working-directory: ./bk
+      - uses: nanasess/setup-chromedriver@v1.0.5
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p bk
+  test-windows:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            toolchain: 1.56.0
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            toolchain: nightly
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: ${{ matrix.target }}
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+      - uses: Swatinem/rust-cache@v1
+      - run: |
+          choco install postgresql13 --force --params '/Password:root'
+          echo "C:\Program Files\PostgreSQL\13\bin" >> $GITHUB_PATH
+          echo "C:\Program Files\PostgreSQL\13\lib" >> $GITHUB_PATH
+          echo "PQ_LIB_DIR=C:\Program Files\PostgreSQL\13\lib" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgres://postgres:root@localhost/bk_development" >> $GITHUB_ENV
+        shell: bash
+      - run: cargo install diesel_cli --no-default-features --features postgres
+      - run: diesel database reset
+        working-directory: ./bk
+      - uses: nanasess/setup-chromedriver@v1.0.5
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: -p bk
   lints:
     runs-on: ubuntu-latest
     steps:
