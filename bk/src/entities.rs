@@ -73,19 +73,21 @@ impl NewScrape {
 
 #[cfg(test)]
 mod test {
+    use diesel::r2d2::PooledConnection;
     use diesel::result::Error;
-    use diesel::{Connection, PgConnection};
+    use diesel::Connection;
 
-    use crate::embedded_migrations;
     use crate::entities::{NewScrape, Scrape, SearchScrape};
-    use crate::{establish_connection, Scraper};
+    use crate::{embedded_migrations, PgConnectionManager};
+    use crate::{init_pool, Scraper};
 
-    fn setup() -> anyhow::Result<PgConnection> {
+    fn setup() -> anyhow::Result<PooledConnection<PgConnectionManager>> {
         std::env::set_var(
             "DATABASE_URL",
             "postgres://postgres:@localhost/bk_development",
         );
-        let conn = establish_connection()?;
+        let pool = init_pool()?;
+        let conn = pool.get()?;
         embedded_migrations::run(&conn)?;
         Ok(conn)
     }

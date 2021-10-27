@@ -13,7 +13,7 @@
 //! Bookmark or bucket service
 
 use bk::entities::{Scrape, SearchScrape};
-use bk::{establish_connection, migrate_database, Scraped, Scraper};
+use bk::{init_pool, migrate_database, Scraped, Scraper};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -40,7 +40,8 @@ enum Commands {
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
-    let conn = establish_connection()?;
+    let pool = init_pool()?;
+    let conn = pool.get()?;
     migrate_database(&conn)?;
 
     let commands = Commands::from_args();
@@ -74,8 +75,9 @@ async fn search_command(url: &Option<String>) -> anyhow::Result<()> {
         url: url.to_owned(),
     };
 
-    let connection = establish_connection()?;
-    let scrapes = Scrape::search(&connection, &params)?;
+    let pool = init_pool()?;
+    let conn = pool.get()?;
+    let scrapes = Scrape::search(&conn, &params)?;
 
     println!("total {}", scrapes.len());
     for scrape in scrapes {

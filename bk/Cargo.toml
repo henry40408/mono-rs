@@ -9,7 +9,7 @@ description = "Bookmark or bucket service"
 
 [dependencies]
 anyhow = "1"
-diesel = { version = "1.4", features = ["postgres"] }
+diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
 dotenv = "0.15"
 failure = "0.1"

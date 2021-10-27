@@ -20,7 +20,8 @@ extern crate diesel_migrations;
 
 use crate::entities::NewScrape;
 use anyhow::bail;
-use diesel::{Connection, PgConnection};
+use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::PgConnection;
 use failure::ResultExt;
 use headless_chrome::Browser;
 use scraper::{Html, Selector};
@@ -34,10 +35,16 @@ pub mod entities;
 
 embed_migrations!();
 
-/// Connect to PostgreSQL with environment variable
-pub fn establish_connection() -> anyhow::Result<PgConnection> {
+type PgConnectionManager = ConnectionManager<PgConnection>;
+
+/// PostgreSQL connection pool
+pub type PgPool = Pool<PgConnectionManager>;
+
+/// Build PostgreSQL connection pool with environment variable
+pub fn init_pool() -> anyhow::Result<PgPool> {
     let uri = env::var("DATABASE_URL").expect("DATABASE is required");
-    Ok(PgConnection::establish(&uri)?)
+    let manager = PgConnectionManager::new(uri);
+    Ok(PgPool::builder().build(manager)?)
 }
 
 /// Run database migrations
