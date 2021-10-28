@@ -39,10 +39,10 @@ enum Commands {
         #[structopt(long)]
         /// Scrape with headless Chromium?
         headless: bool,
-        #[structopt(name="URLS")]
+        #[structopt(name = "URLS")]
         /// URLs to be scraped
-        urls:Vec<String>,
-    }
+        urls: Vec<String>,
+    },
 }
 
 #[tokio::main]
@@ -57,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
     match commands {
         Commands::Scrape { ref urls, .. } => scrape_command(urls).await?,
         Commands::Search { ref url } => search_command(url).await?,
-        Commands::Save {ref urls,headless} => save_command(urls,headless).await?,
+        Commands::Save { ref urls, headless } => save_command(urls, headless).await?,
     }
     Ok(())
 }
@@ -133,10 +133,7 @@ mod test {
     use diesel::Connection;
 
     fn setup() -> anyhow::Result<PgPooledConnection> {
-        std::env::set_var(
-            "DATABASE_URL",
-            "postgres://postgres:@localhost/bk_test",
-        );
+        std::env::set_var("DATABASE_URL", "postgres://postgres:@localhost/bk_test");
         let pool = init_pool()?;
         let conn = pool.get()?;
         migrate_database(&conn)?;

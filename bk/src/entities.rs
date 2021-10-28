@@ -82,10 +82,7 @@ mod test {
     use crate::{init_pool, Scraper};
 
     fn setup() -> anyhow::Result<PgPooledConnection> {
-        std::env::set_var(
-            "DATABASE_URL",
-            "postgres://postgres:@localhost/bk_test",
-        );
+        std::env::set_var("DATABASE_URL", "postgres://postgres:@localhost/bk_test");
         let pool = init_pool()?;
         let conn = pool.get()?;
         embedded_migrations::run(&conn)?;
