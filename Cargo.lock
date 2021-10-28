@@ -176,6 +176,7 @@ dependencies = [
  "diesel_migrations",
  "dotenv",
  "failure",
+ "futures",
  "headless_chrome",
  "infer",
  "reqwest",

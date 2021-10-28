@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use crate::PgPooledConnection;
 use diesel::PgConnection;
 
 use crate::schema::scrapes;
@@ -60,7 +61,7 @@ pub struct NewScrape {
 
 impl NewScrape {
     /// Save scrape
-    pub fn save(&self, conn: &PgConnection) -> diesel::result::QueryResult<()> {
+    pub fn save(&self, conn: &PgPooledConnection) -> diesel::result::QueryResult<()> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
 
@@ -73,18 +74,17 @@ impl NewScrape {
 
 #[cfg(test)]
 mod test {
-    use diesel::r2d2::PooledConnection;
     use diesel::result::Error;
     use diesel::Connection;
 
     use crate::entities::{NewScrape, Scrape, SearchScrape};
-    use crate::{embedded_migrations, PgConnectionManager};
+    use crate::{embedded_migrations, PgPooledConnection};
     use crate::{init_pool, Scraper};
 
-    fn setup() -> anyhow::Result<PooledConnection<PgConnectionManager>> {
+    fn setup() -> anyhow::Result<PgPooledConnection> {
         std::env::set_var(
             "DATABASE_URL",
-            "postgres://postgres:@localhost/bk_development",
+            "postgres://postgres:@localhost/bk_test",
         );
         let pool = init_pool()?;
         let conn = pool.get()?;

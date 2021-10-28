@@ -13,6 +13,7 @@ diesel = { version = "1.4", features = ["postgres", "r2d2"] }
 diesel_migrations = { version = "1.4", features = ["postgres"] }
 dotenv = "0.15"
 failure = "0.1"
+futures = { version = "0.3", default-features = false }
 headless_chrome = "0.9"
 infer = "0.5"
 reqwest = { version = "0.11", default-features = false, features = ["multipart", "rustls-tls"] }

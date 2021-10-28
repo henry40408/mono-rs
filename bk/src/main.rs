@@ -12,8 +12,8 @@
 
 //! Bookmark or bucket service
 
-use bk::entities::{Scrape, SearchScrape};
-use bk::{init_pool, migrate_database, Scraped, Scraper};
+use bk::entities::{NewScrape, Scrape, SearchScrape};
+use bk::{init_pool, migrate_database, PgPooledConnection, Scraped, Scraper};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -34,6 +34,15 @@ enum Commands {
         /// URL to be searched
         url: Option<String>,
     },
+    /// Scrape and save to database
+    Save {
+        #[structopt(long)]
+        /// Scrape with headless Chromium?
+        headless: bool,
+        #[structopt(name="URLS")]
+        /// URLs to be scraped
+        urls:Vec<String>,
+    }
 }
 
 #[tokio::main]
@@ -48,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
     match commands {
         Commands::Scrape { ref urls, .. } => scrape_command(urls).await?,
         Commands::Search { ref url } => search_command(url).await?,
+        Commands::Save {ref urls,headless} => save_command(urls,headless).await?,
     }
     Ok(())
 }
@@ -85,4 +95,60 @@ async fn search_command(url: &Option<String>) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+async fn save_command(urls: &[String], headless: bool) -> anyhow::Result<()> {
+    let pool = init_pool()?;
+    let conn = pool.get()?;
+
+    let mut tasks = vec![];
+    for url in urls {
+        tasks.push(save(&conn, url, headless));
+    }
+
+    let results = futures::future::join_all(tasks).await;
+    for result in results {
+        let _result = result?;
+    }
+
+    Ok(())
+}
+
+async fn save(conn: &PgPooledConnection, url: &str, headless: bool) -> anyhow::Result<()> {
+    let mut scraper = Scraper::from_url(url);
+    scraper.headless = headless;
+
+    let scraped = scraper.scrape().await?;
+
+    let new_scrape = NewScrape::from(scraped);
+    new_scrape.save(conn)?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use crate::save;
+    use bk::{init_pool, migrate_database, PgPooledConnection};
+    use diesel::Connection;
+
+    fn setup() -> anyhow::Result<PgPooledConnection> {
+        std::env::set_var(
+            "DATABASE_URL",
+            "postgres://postgres:@localhost/bk_test",
+        );
+        let pool = init_pool()?;
+        let conn = pool.get()?;
+        migrate_database(&conn)?;
+        Ok(conn)
+    }
+
+    #[tokio::test]
+    async fn test_save_command() -> anyhow::Result<()> {
+        let conn = setup()?;
+        let url = "https://www.example.com";
+        conn.begin_test_transaction()?;
+        save(&conn, &url, false).await?;
+        Ok(())
+    }
 }

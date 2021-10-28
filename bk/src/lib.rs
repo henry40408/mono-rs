@@ -20,7 +20,7 @@ extern crate diesel_migrations;
 
 use crate::entities::NewScrape;
 use anyhow::bail;
-use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::PgConnection;
 use failure::ResultExt;
 use headless_chrome::Browser;
@@ -39,6 +39,9 @@ type PgConnectionManager = ConnectionManager<PgConnection>;
 
 /// PostgreSQL connection pool
 pub type PgPool = Pool<PgConnectionManager>;
+
+/// PostgreSQL connection from connection pool
+pub type PgPooledConnection = PooledConnection<PgConnectionManager>;
 
 /// Build PostgreSQL connection pool with environment variable
 pub fn init_pool() -> anyhow::Result<PgPool> {
