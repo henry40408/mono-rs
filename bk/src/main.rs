@@ -12,8 +12,9 @@
 
 //! Bookmark or bucket service
 
-use bk::entities::{NewScrape, Scrape, SearchScrape};
+use bk::entities::{NewScrape, Scrape, SearchScrape, User};
 use bk::{connect_database, migrate_database, Scraped, Scraper};
+use comfy_table::Table;
 use diesel::SqliteConnection;
 use structopt::StructOpt;
 
@@ -44,6 +45,22 @@ enum Commands {
         /// URLs to be scraped
         urls: Vec<String>,
     },
+    /// Manage users
+    User(UserCommand),
+}
+
+/// Manage users
+#[derive(Debug, StructOpt)]
+#[structopt()]
+enum UserCommand {
+    /// Add user
+    Add {
+        /// Username
+        #[structopt(short, long)]
+        username: String,
+    },
+    /// List users
+    List,
 }
 
 #[tokio::main]
@@ -55,14 +72,36 @@ async fn main() -> anyhow::Result<()> {
 
     let commands = Commands::from_args();
     match commands {
-        Commands::Scrape { ref urls, .. } => scrape_command(urls).await?,
-        Commands::Search { ref url } => search_command(url).await?,
+        Commands::Scrape { ref urls, .. } => scrape(urls).await?,
+        Commands::Search { ref url } => search(url).await?,
         Commands::Save { ref urls, headless } => save_command(urls, headless).await?,
+        Commands::User(u) => match u {
+            UserCommand::Add { .. } => {}
+            UserCommand::List => list_users()?,
+        },
     }
     Ok(())
 }
 
-async fn scrape_command(urls: &[String]) -> anyhow::Result<()> {
+fn list_users() -> anyhow::Result<()> {
+    let conn = connect_database()?;
+    let users = User::list(&conn)?;
+    println!("{} user(s)", users.len());
+
+    let mut table = Table::new();
+    table.set_header(vec!["ID", "Username", "Created at"]);
+    for user in users {
+        table.add_row(vec![
+            user.id.to_string(),
+            user.username,
+            user.created_at.to_string(),
+        ]);
+    }
+    println!("{}", table);
+    Ok(())
+}
+
+async fn scrape(urls: &[String]) -> anyhow::Result<()> {
     for url in urls {
         let new_doc = Scraper::from_url(url);
         let scraped = new_doc.scrape().await?;
@@ -80,7 +119,7 @@ async fn scrape_command(urls: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn search_command(url: &Option<String>) -> anyhow::Result<()> {
+async fn search(url: &Option<String>) -> anyhow::Result<()> {
     let params = SearchScrape {
         url: url.to_owned(),
     };

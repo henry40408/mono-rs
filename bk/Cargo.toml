@@ -11,6 +11,7 @@ description = "Bookmark or bucket service"
 anyhow = "1"
 bcrypt = "0.10"
 chrono = { version = "0.4", default-features = false }
+comfy-table = "5.0"
 diesel = { version = "1.4", features = ["chrono", "sqlite"] }
 diesel_migrations = { version = "1.4", features = ["sqlite"] }
 dotenv = "0.15"

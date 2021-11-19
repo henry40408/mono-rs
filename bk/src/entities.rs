@@ -16,6 +16,18 @@ pub struct User {
     pub created_at: NaiveDateTime,
 }
 
+impl User {
+    /// List users
+    pub fn list(conn: &SqliteConnection) -> anyhow::Result<Vec<User>> {
+        use crate::schema::users::dsl;
+        use diesel::prelude::*;
+
+        let query = dsl::users.into_boxed();
+        let users: Vec<User> = query.load::<User>(conn)?;
+        Ok(users)
+    }
+}
+
 /// New user
 #[derive(Debug)]
 pub struct NewUser<'a> {
