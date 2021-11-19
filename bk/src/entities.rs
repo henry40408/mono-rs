@@ -3,9 +3,87 @@ use std::time::SystemTime;
 use crate::PgPooledConnection;
 use diesel::PgConnection;
 
-use crate::schema::scrapes;
+use crate::schema::{scrapes, users};
 
-/// Scrape in database
+/// User
+#[derive(Debug, Queryable)]
+pub struct User {
+    /// Primary key
+    pub id: i32,
+    /// Username
+    pub username: String,
+    /// Encrypted password
+    pub encrypted_password: String,
+    /// When the user is created
+    pub created_at: SystemTime,
+}
+
+/// New user
+#[derive(Debug)]
+pub struct NewUser<'a> {
+    /// Username
+    pub username: &'a str,
+    /// Raw password, will be encrypted before save to database
+    pub password: &'a str,
+}
+
+/// New user with encrypted password
+#[derive(Debug, Insertable)]
+#[table_name = "users"]
+pub struct NewUserWithEncryptedPassword {
+    /// Username
+    pub username: String,
+    /// Encrypted password
+    pub encrypted_password: String,
+}
+
+/// Create user
+pub fn create_user(conn: &PgConnection, new_user: &NewUser) -> anyhow::Result<usize> {
+    use crate::schema::users::dsl;
+    use diesel::prelude::*;
+
+    let encrypted_password = bcrypt::hash(&new_user.password, bcrypt::DEFAULT_COST)?;
+    let with_encrypted_password = NewUserWithEncryptedPassword {
+        username: new_user.username.to_string(),
+        encrypted_password,
+    };
+
+    let affected_rows = diesel::insert_into(dsl::users)
+        .values(with_encrypted_password)
+        .execute(conn)?;
+    Ok(affected_rows)
+}
+
+/// Parameters to validate user e.g. sign-in
+#[derive(Debug)]
+pub struct ValidateUser<'a> {
+    /// Username
+    pub username: &'a str,
+    /// Password to be validated
+    pub password: &'a str,
+}
+
+/// Validate user
+pub fn validate_user(conn: &PgConnection, params: &ValidateUser) -> Option<User> {
+    use crate::schema::users::dsl;
+    use diesel::prelude::*;
+
+    let mut query = dsl::users.into_boxed();
+    query = query.filter(dsl::username.eq(&params.username));
+
+    let users: Vec<User> = query.load::<User>(conn).ok()?;
+    if let Some(user) = users.first() {
+        if bcrypt::verify(&params.password, &user.encrypted_password).ok()? {
+            users.into_iter().nth(0)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Scrape
 #[derive(Debug, Queryable, Insertable)]
 pub struct Scrape {
     /// Primary key
@@ -77,7 +155,9 @@ mod test {
     use diesel::result::Error;
     use diesel::Connection;
 
-    use crate::entities::{NewScrape, Scrape, SearchScrape};
+    use crate::entities::{
+        create_user, validate_user, NewScrape, NewUser, Scrape, SearchScrape, ValidateUser,
+    };
     use crate::{embedded_migrations, PgPooledConnection};
     use crate::{init_pool, Scraper};
 
@@ -87,6 +167,31 @@ mod test {
         let conn = pool.get()?;
         embedded_migrations::run(&conn)?;
         Ok(conn)
+    }
+
+    #[tokio::test]
+    async fn test_validate_user() -> anyhow::Result<()> {
+        let conn = setup()?;
+        conn.test_transaction::<_, Error, _>(|| {
+            let username = "user";
+            let password = "password";
+
+            let new_user = NewUser { username, password };
+
+            let res = create_user(&conn, &new_user);
+            let rows_effected = res.unwrap();
+            assert_eq!(1, rows_effected);
+
+            let params = ValidateUser { username, password };
+
+            let res = validate_user(&conn, &params);
+            let user = res.unwrap();
+            assert_eq!(user.username, username);
+            assert_ne!(user.encrypted_password, password);
+
+            Ok(())
+        });
+        Ok(())
     }
 
     #[tokio::test]
