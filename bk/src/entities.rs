@@ -1,3 +1,4 @@
+use anyhow::bail;
 use chrono::NaiveDateTime;
 use diesel::SqliteConnection;
 
@@ -25,6 +26,22 @@ impl User {
         let query = dsl::users.into_boxed();
         let users: Vec<User> = query.load::<User>(conn)?;
         Ok(users)
+    }
+
+    /// Single user
+    pub fn single(conn: &SqliteConnection) -> anyhow::Result<User> {
+        use crate::schema::users::dsl;
+        use diesel::dsl::count;
+        use diesel::prelude::*;
+
+        let res = dsl::users.select(count(dsl::id)).first(conn);
+        if Ok(1) != res {
+            bail!("more than one user found")
+        }
+
+        let query = dsl::users.into_boxed();
+        let user: User = query.first::<User>(conn)?;
+        Ok(user)
     }
 }
 
@@ -66,12 +83,12 @@ pub struct NewUserWithEncryptedPassword {
     pub encrypted_password: String,
 }
 
-/// Parameters to validate user e.g. sign-in
+/// User authentication
 #[derive(Debug)]
 pub struct Authentication<'a> {
     /// Username
     pub username: &'a str,
-    /// Password to be validated
+    /// Password
     pub password: &'a str,
 }
 
@@ -84,10 +101,10 @@ impl<'a> Authentication<'a> {
         let mut query = dsl::users.into_boxed();
         query = query.filter(dsl::username.eq(self.username));
 
-        let users: Vec<User> = query.load::<User>(conn).ok()?;
-        if let Some(user) = users.first() {
+        let res = query.first::<User>(conn);
+        if let Ok(user) = res {
             if bcrypt::verify(self.password, &user.encrypted_password).ok()? {
-                users.into_iter().next()
+                Some(user)
             } else {
                 None
             }
@@ -171,7 +188,7 @@ mod test {
     use diesel::{Connection, SqliteConnection};
 
     use crate::embedded_migrations;
-    use crate::entities::{Authentication, NewScrape, NewUser, Scrape, SearchScrape};
+    use crate::entities::{Authentication, NewScrape, NewUser, Scrape, SearchScrape, User};
     use crate::{connect_database, Scraper};
 
     fn setup() -> anyhow::Result<SqliteConnection> {
@@ -183,7 +200,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_validate_user() -> anyhow::Result<()> {
+    async fn test_authentication() -> anyhow::Result<()> {
         let conn = setup()?;
         conn.test_transaction::<_, Error, _>(|| {
             let username = "user";
@@ -199,6 +216,10 @@ mod test {
             let user = res.unwrap();
             assert_eq!(user.username, username);
             assert_ne!(user.encrypted_password, password);
+
+            let res = User::single(&conn);
+            let user = res.unwrap();
+            assert_eq!(user.username, username);
 
             Ok(())
         });
