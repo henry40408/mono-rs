@@ -12,7 +12,8 @@
 
 //! Bookmark or bucket service
 
-use bk::entities::{NewScrape, Scrape, SearchScrape, User};
+use anyhow::bail;
+use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::{connect_database, migrate_database, Scraped, Scraper};
 use comfy_table::Table;
 use diesel::SqliteConnection;
@@ -54,6 +55,10 @@ enum Commands {
 #[structopt()]
 enum UserCommand {
     /// Add user
+    ///
+    /// Password should be set through standard input
+    ///
+    /// e.g. echo password | bk user add -u user
     Add {
         /// Username
         #[structopt(short, long)]
@@ -76,10 +81,30 @@ async fn main() -> anyhow::Result<()> {
         Commands::Search { ref url } => search(url).await?,
         Commands::Save { ref urls, headless } => save_command(urls, headless).await?,
         Commands::User(u) => match u {
-            UserCommand::Add { .. } => {}
+            UserCommand::Add { ref username } => add_user(username)?,
             UserCommand::List => list_users()?,
         },
     }
+    Ok(())
+}
+
+fn add_user(username: &str) -> anyhow::Result<()> {
+    let mut password = String::new();
+    std::io::stdin().read_line(&mut password)?;
+    password = password.trim().to_string();
+
+    if password.is_empty() {
+        bail!("password is required")
+    }
+
+    let conn = connect_database()?;
+    let new_user = NewUser {
+        username,
+        password: &password,
+    };
+    let rows_affected = new_user.save(&conn)?;
+    println!("{} user(s) created", rows_affected);
+
     Ok(())
 }
 

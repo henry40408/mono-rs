@@ -37,6 +37,25 @@ pub struct NewUser<'a> {
     pub password: &'a str,
 }
 
+impl<'a> NewUser<'a> {
+    /// Create user
+    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
+        use crate::schema::users::dsl;
+        use diesel::prelude::*;
+
+        let encrypted_password = bcrypt::hash(&self.password, bcrypt::DEFAULT_COST)?;
+        let with_encrypted_password = NewUserWithEncryptedPassword {
+            username: self.username.to_string(),
+            encrypted_password,
+        };
+
+        let affected_rows = diesel::insert_into(dsl::users)
+            .values(with_encrypted_password)
+            .execute(conn)?;
+        Ok(affected_rows)
+    }
+}
+
 /// New user with encrypted password
 #[derive(Debug, Insertable)]
 #[table_name = "users"]
@@ -47,49 +66,34 @@ pub struct NewUserWithEncryptedPassword {
     pub encrypted_password: String,
 }
 
-/// Create user
-pub fn create_user(conn: &SqliteConnection, new_user: &NewUser) -> anyhow::Result<usize> {
-    use crate::schema::users::dsl;
-    use diesel::prelude::*;
-
-    let encrypted_password = bcrypt::hash(&new_user.password, bcrypt::DEFAULT_COST)?;
-    let with_encrypted_password = NewUserWithEncryptedPassword {
-        username: new_user.username.to_string(),
-        encrypted_password,
-    };
-
-    let affected_rows = diesel::insert_into(dsl::users)
-        .values(with_encrypted_password)
-        .execute(conn)?;
-    Ok(affected_rows)
-}
-
 /// Parameters to validate user e.g. sign-in
 #[derive(Debug)]
-pub struct ValidateUser<'a> {
+pub struct Authentication<'a> {
     /// Username
     pub username: &'a str,
     /// Password to be validated
     pub password: &'a str,
 }
 
-/// Validate user
-pub fn validate_user(conn: &SqliteConnection, params: &ValidateUser) -> Option<User> {
-    use crate::schema::users::dsl;
-    use diesel::prelude::*;
+impl<'a> Authentication<'a> {
+    /// Validate user
+    pub fn authenticate(&self, conn: &SqliteConnection) -> Option<User> {
+        use crate::schema::users::dsl;
+        use diesel::prelude::*;
 
-    let mut query = dsl::users.into_boxed();
-    query = query.filter(dsl::username.eq(&params.username));
+        let mut query = dsl::users.into_boxed();
+        query = query.filter(dsl::username.eq(self.username));
 
-    let users: Vec<User> = query.load::<User>(conn).ok()?;
-    if let Some(user) = users.first() {
-        if bcrypt::verify(&params.password, &user.encrypted_password).ok()? {
-            users.into_iter().next()
+        let users: Vec<User> = query.load::<User>(conn).ok()?;
+        if let Some(user) = users.first() {
+            if bcrypt::verify(self.password, &user.encrypted_password).ok()? {
+                users.into_iter().next()
+            } else {
+                None
+            }
         } else {
             None
         }
-    } else {
-        None
     }
 }
 
@@ -167,9 +171,7 @@ mod test {
     use diesel::{Connection, SqliteConnection};
 
     use crate::embedded_migrations;
-    use crate::entities::{
-        create_user, validate_user, NewScrape, NewUser, Scrape, SearchScrape, ValidateUser,
-    };
+    use crate::entities::{Authentication, NewScrape, NewUser, Scrape, SearchScrape};
     use crate::{connect_database, Scraper};
 
     fn setup() -> anyhow::Result<SqliteConnection> {
@@ -188,14 +190,12 @@ mod test {
             let password = "password";
 
             let new_user = NewUser { username, password };
+            let res = new_user.save(&conn);
+            let rows_affected = res.unwrap();
+            assert_eq!(1, rows_affected);
 
-            let res = create_user(&conn, &new_user);
-            let rows_effected = res.unwrap();
-            assert_eq!(1, rows_effected);
-
-            let params = ValidateUser { username, password };
-
-            let res = validate_user(&conn, &params);
+            let auth = Authentication { username, password };
+            let res = auth.authenticate(&conn);
             let user = res.unwrap();
             assert_eq!(user.username, username);
             assert_ne!(user.encrypted_password, password);
