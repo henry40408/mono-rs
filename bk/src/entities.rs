@@ -1,7 +1,5 @@
-use std::time::SystemTime;
-
-use crate::PgPooledConnection;
-use diesel::PgConnection;
+use chrono::NaiveDateTime;
+use diesel::SqliteConnection;
 
 use crate::schema::{scrapes, users};
 
@@ -15,7 +13,7 @@ pub struct User {
     /// Encrypted password
     pub encrypted_password: String,
     /// When the user is created
-    pub created_at: SystemTime,
+    pub created_at: NaiveDateTime,
 }
 
 /// New user
@@ -38,7 +36,7 @@ pub struct NewUserWithEncryptedPassword {
 }
 
 /// Create user
-pub fn create_user(conn: &PgConnection, new_user: &NewUser) -> anyhow::Result<usize> {
+pub fn create_user(conn: &SqliteConnection, new_user: &NewUser) -> anyhow::Result<usize> {
     use crate::schema::users::dsl;
     use diesel::prelude::*;
 
@@ -64,7 +62,7 @@ pub struct ValidateUser<'a> {
 }
 
 /// Validate user
-pub fn validate_user(conn: &PgConnection, params: &ValidateUser) -> Option<User> {
+pub fn validate_user(conn: &SqliteConnection, params: &ValidateUser) -> Option<User> {
     use crate::schema::users::dsl;
     use diesel::prelude::*;
 
@@ -74,7 +72,7 @@ pub fn validate_user(conn: &PgConnection, params: &ValidateUser) -> Option<User>
     let users: Vec<User> = query.load::<User>(conn).ok()?;
     if let Some(user) = users.first() {
         if bcrypt::verify(&params.password, &user.encrypted_password).ok()? {
-            users.into_iter().nth(0)
+            users.into_iter().next()
         } else {
             None
         }
@@ -95,7 +93,7 @@ pub struct Scrape {
     /// Actual content from URL
     pub content: Vec<u8>,
     /// When the URL is scraped
-    pub created_at: SystemTime,
+    pub created_at: NaiveDateTime,
 }
 
 /// Search parameters on scrapes
@@ -108,7 +106,7 @@ pub struct SearchScrape {
 impl Scrape {
     /// Search scrapes with parameters
     pub fn search(
-        conn: &PgConnection,
+        conn: &SqliteConnection,
         params: &SearchScrape,
     ) -> diesel::result::QueryResult<Vec<Scrape>> {
         use crate::schema::scrapes::dsl;
@@ -139,7 +137,7 @@ pub struct NewScrape {
 
 impl NewScrape {
     /// Save scrape
-    pub fn save(&self, conn: &PgPooledConnection) -> diesel::result::QueryResult<()> {
+    pub fn save(&self, conn: &SqliteConnection) -> diesel::result::QueryResult<()> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
 
@@ -152,19 +150,20 @@ impl NewScrape {
 
 #[cfg(test)]
 mod test {
+    use diesel::connection::SimpleConnection;
     use diesel::result::Error;
-    use diesel::Connection;
+    use diesel::{Connection, SqliteConnection};
 
+    use crate::embedded_migrations;
     use crate::entities::{
         create_user, validate_user, NewScrape, NewUser, Scrape, SearchScrape, ValidateUser,
     };
-    use crate::{embedded_migrations, PgPooledConnection};
-    use crate::{init_pool, Scraper};
+    use crate::{connect_database, Scraper};
 
-    fn setup() -> anyhow::Result<PgPooledConnection> {
-        std::env::set_var("DATABASE_URL", "postgres://postgres:@localhost/bk_test");
-        let pool = init_pool()?;
-        let conn = pool.get()?;
+    fn setup() -> anyhow::Result<SqliteConnection> {
+        std::env::set_var("DATABASE_URL", "test.sqlite3");
+        let conn = connect_database()?;
+        conn.batch_execute("PRAGMA busy_timeout = 5000;")?;
         embedded_migrations::run(&conn)?;
         Ok(conn)
     }

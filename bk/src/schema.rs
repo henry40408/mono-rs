@@ -1,18 +1,18 @@
 table! {
     scrapes (id) {
-        id -> Int4,
-        url -> Varchar,
+        id -> Integer,
+        url -> Text,
         headless -> Bool,
-        content -> Bytea,
+        content -> Binary,
         created_at -> Timestamp,
     }
 }
 
 table! {
     users (id) {
-        id -> Int4,
-        username -> Varchar,
-        encrypted_password -> Varchar,
+        id -> Integer,
+        username -> Text,
+        encrypted_password -> Text,
         created_at -> Timestamp,
     }
 }

@@ -13,7 +13,8 @@
 //! Bookmark or bucket service
 
 use bk::entities::{NewScrape, Scrape, SearchScrape};
-use bk::{init_pool, migrate_database, PgPooledConnection, Scraped, Scraper};
+use bk::{connect_database, migrate_database, Scraped, Scraper};
+use diesel::SqliteConnection;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -49,8 +50,7 @@ enum Commands {
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
 
-    let pool = init_pool()?;
-    let conn = pool.get()?;
+    let conn = connect_database()?;
     migrate_database(&conn)?;
 
     let commands = Commands::from_args();
@@ -85,8 +85,7 @@ async fn search_command(url: &Option<String>) -> anyhow::Result<()> {
         url: url.to_owned(),
     };
 
-    let pool = init_pool()?;
-    let conn = pool.get()?;
+    let conn = connect_database()?;
     let scrapes = Scrape::search(&conn, &params)?;
 
     println!("total {}", scrapes.len());
@@ -98,8 +97,7 @@ async fn search_command(url: &Option<String>) -> anyhow::Result<()> {
 }
 
 async fn save_command(urls: &[String], headless: bool) -> anyhow::Result<()> {
-    let pool = init_pool()?;
-    let conn = pool.get()?;
+    let conn = connect_database()?;
 
     let mut tasks = vec![];
     for url in urls {
@@ -114,7 +112,7 @@ async fn save_command(urls: &[String], headless: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn save(conn: &PgPooledConnection, url: &str, headless: bool) -> anyhow::Result<()> {
+async fn save(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow::Result<()> {
     let mut scraper = Scraper::from_url(url);
     scraper.headless = headless;
 
@@ -129,13 +127,14 @@ async fn save(conn: &PgPooledConnection, url: &str, headless: bool) -> anyhow::R
 #[cfg(test)]
 mod test {
     use crate::save;
-    use bk::{init_pool, migrate_database, PgPooledConnection};
-    use diesel::Connection;
+    use bk::{connect_database, migrate_database};
+    use diesel::connection::SimpleConnection;
+    use diesel::{Connection, SqliteConnection};
 
-    fn setup() -> anyhow::Result<PgPooledConnection> {
-        std::env::set_var("DATABASE_URL", "postgres://postgres:@localhost/bk_test");
-        let pool = init_pool()?;
-        let conn = pool.get()?;
+    fn setup() -> anyhow::Result<SqliteConnection> {
+        std::env::set_var("DATABASE_URL", "test.sqlite3");
+        let conn = connect_database()?;
+        conn.batch_execute("PRAGMA busy_timeout = 5000;")?;
         migrate_database(&conn)?;
         Ok(conn)
     }

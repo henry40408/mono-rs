@@ -20,8 +20,7 @@ extern crate diesel_migrations;
 
 use crate::entities::NewScrape;
 use anyhow::bail;
-use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
-use diesel::PgConnection;
+use diesel::{Connection, SqliteConnection};
 use failure::ResultExt;
 use headless_chrome::Browser;
 use scraper::{Html, Selector};
@@ -35,23 +34,16 @@ pub mod entities;
 
 embed_migrations!();
 
-type PgConnectionManager = ConnectionManager<PgConnection>;
-
-/// PostgreSQL connection pool
-pub type PgPool = Pool<PgConnectionManager>;
-
-/// PostgreSQL connection from connection pool
-pub type PgPooledConnection = PooledConnection<PgConnectionManager>;
-
-/// Build PostgreSQL connection pool with environment variable
-pub fn init_pool() -> anyhow::Result<PgPool> {
-    let uri = env::var("DATABASE_URL").expect("DATABASE is required");
-    let manager = PgConnectionManager::new(uri);
-    Ok(PgPool::builder().build(manager)?)
+/// Build SQLite connection with environment variable
+pub fn connect_database() -> anyhow::Result<SqliteConnection> {
+    let uri = env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    Ok(SqliteConnection::establish(&uri)?)
 }
 
 /// Run database migrations
-pub fn migrate_database(conn: &PgConnection) -> Result<(), diesel_migrations::RunMigrationsError> {
+pub fn migrate_database(
+    conn: &SqliteConnection,
+) -> Result<(), diesel_migrations::RunMigrationsError> {
     embedded_migrations::run(conn)
 }
 
