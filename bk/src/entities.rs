@@ -152,6 +152,13 @@ pub struct SearchScrape {
 }
 
 impl Scrape {
+    /// Find scrape with ID
+    pub fn find(conn:&SqliteConnection, id:i32) ->anyhow::Result<Scrape> {
+        use crate::schema::scrapes::dsl;
+        use diesel::prelude::*;
+        dsl::scrapes.find(id).first(conn).context("cannot find scrape with ID")
+    }
+
     /// Search scrapes with parameters
     pub fn search(conn: &SqliteConnection, params: &SearchScrape) -> anyhow::Result<Vec<Scrape>> {
         use crate::schema::scrapes::dsl;

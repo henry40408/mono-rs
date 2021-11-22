@@ -1,17 +1,19 @@
 #![deny(
-    missing_docs,
-    missing_debug_implementations,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unstable_features,
-    unused_import_braces,
-    unused_qualifications
+missing_docs,
+missing_debug_implementations,
+missing_copy_implementations,
+trivial_casts,
+trivial_numeric_casts,
+unsafe_code,
+unstable_features,
+unused_import_braces,
+unused_qualifications
 )]
 
 //! Bookmark or bucket service
 
+use std::io;
+use std::io::Write;
 use anyhow::bail;
 use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::{connect_database, migrate_database, Scraped, Scraper};
@@ -47,6 +49,11 @@ enum Commands {
         /// URLs to be scraped
         urls: Vec<String>,
     },
+    /// Show scrape
+    Show {
+        #[structopt(short, long)]
+        id: i32,
+    },
     /// Manage users
     User(UserCommand),
 }
@@ -81,6 +88,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Scrape { ref urls, .. } => scrape(urls).await?,
         Commands::Search { ref url } => search(url).await?,
         Commands::Save { ref urls, headless } => save_many(urls, headless).await?,
+        Commands::Show { id } => show(&conn, id)?,
         Commands::User(u) => match u {
             UserCommand::Add { ref username } => add_user(username)?,
             UserCommand::List => list_users()?,
@@ -199,6 +207,15 @@ async fn save_one(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow:
     let new_scrape = NewScrape::from(scraped);
     new_scrape.save(conn)?;
 
+    Ok(())
+}
+
+fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
+    let scrape = Scrape::find(conn, id)?;
+    let c = scrape.content;
+    io::stdout().write_all(c.as_slice())?;
+    io::stdout().flush()?;
+    eprintln!("{} byte(s) written", c.len());
     Ok(())
 }
 
