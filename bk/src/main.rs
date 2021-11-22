@@ -15,6 +15,7 @@
 use anyhow::bail;
 use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::{connect_database, migrate_database, Scraped, Scraper};
+use chrono::Utc;
 use comfy_table::Table;
 use diesel::SqliteConnection;
 use structopt::StructOpt;
@@ -79,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
     match commands {
         Commands::Scrape { ref urls, .. } => scrape(urls).await?,
         Commands::Search { ref url } => search(url).await?,
-        Commands::Save { ref urls, headless } => save_command(urls, headless).await?,
+        Commands::Save { ref urls, headless } => save_many(urls, headless).await?,
         Commands::User(u) => match u {
             UserCommand::Add { ref username } => add_user(username)?,
             UserCommand::List => list_users()?,
@@ -155,19 +156,30 @@ async fn search(url: &Option<String>) -> anyhow::Result<()> {
     let scrapes = Scrape::search(&conn, &params)?;
 
     println!("total {}", scrapes.len());
+
+    let mut table = Table::new();
+    table.set_header(vec!["ID", "URL", "Headless?", "Created at", "Size"]);
     for scrape in scrapes {
-        println!("{}", scrape.id);
+        let created_at = chrono::DateTime::<Utc>::from_utc(scrape.created_at, Utc);
+        table.add_row(vec![
+            scrape.id.to_string(),
+            scrape.url,
+            scrape.headless.to_string(),
+            created_at.to_rfc3339(),
+            scrape.content.len().to_string(),
+        ]);
     }
+    println!("{}", table);
 
     Ok(())
 }
 
-async fn save_command(urls: &[String], headless: bool) -> anyhow::Result<()> {
+async fn save_many(urls: &[String], headless: bool) -> anyhow::Result<()> {
     let conn = connect_database()?;
 
     let mut tasks = vec![];
     for url in urls {
-        tasks.push(save(&conn, url, headless));
+        tasks.push(save_one(&conn, url, headless));
     }
 
     let results = futures::future::join_all(tasks).await;
@@ -178,7 +190,7 @@ async fn save_command(urls: &[String], headless: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn save(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow::Result<()> {
+async fn save_one(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow::Result<()> {
     let mut scraper = Scraper::from_url(url);
     scraper.headless = headless;
 
@@ -192,7 +204,7 @@ async fn save(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow::Res
 
 #[cfg(test)]
 mod test {
-    use crate::save;
+    use crate::save_one;
     use bk::entities::NewUser;
     use bk::{connect_database, migrate_database};
     use diesel::connection::SimpleConnection;
@@ -219,7 +231,7 @@ mod test {
         new_user.save(&conn).unwrap();
 
         let url = "https://www.example.com";
-        save(&conn, &url, false).await?;
+        save_one(&conn, &url, false).await?;
 
         Ok(())
     }
