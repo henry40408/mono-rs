@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{bail, Context};
 use chrono::NaiveDateTime;
 use diesel::SqliteConnection;
 
@@ -26,6 +26,16 @@ impl User {
         let query = dsl::users.into_boxed();
         let users: Vec<User> = query.load::<User>(conn)?;
         Ok(users)
+    }
+
+    /// Find user by ID
+    pub fn find(conn: &SqliteConnection, id: i32) -> anyhow::Result<User> {
+        use crate::schema::users::dsl;
+        use diesel::prelude::*;
+        dsl::users
+            .find(id)
+            .first(conn)
+            .context("failed to find user by ID")
     }
 
     /// Single user
@@ -138,10 +148,7 @@ pub struct SearchScrape {
 
 impl Scrape {
     /// Search scrapes with parameters
-    pub fn search(
-        conn: &SqliteConnection,
-        params: &SearchScrape,
-    ) -> diesel::result::QueryResult<Vec<Scrape>> {
+    pub fn search(conn: &SqliteConnection, params: &SearchScrape) -> anyhow::Result<Vec<Scrape>> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
 
@@ -152,7 +159,9 @@ impl Scrape {
             query = query.filter(dsl::url.like(url));
         }
 
-        query.load::<Scrape>(conn)
+        query
+            .load::<Scrape>(conn)
+            .context("failed to search scrapes")
     }
 }
 
@@ -200,7 +209,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_authentication() -> anyhow::Result<()> {
+    async fn test_authentication_find() -> anyhow::Result<()> {
         let conn = setup()?;
         conn.test_transaction::<_, Error, _>(|| {
             let username = "user";
@@ -220,6 +229,10 @@ mod test {
             let res = User::single(&conn);
             let user = res.unwrap();
             assert_eq!(user.username, username);
+
+            let res = User::find(&conn, user.id);
+            let found = res.unwrap();
+            assert_eq!(found.id, user.id);
 
             Ok(())
         });
@@ -248,7 +261,8 @@ mod test {
             let mut params = SearchScrape::default();
             params.url = Some("example".into());
 
-            let scrapes = Scrape::search(&conn, &params)?;
+            let res = Scrape::search(&conn, &params);
+            let scrapes = res.unwrap();
             assert_eq!(1, scrapes.len());
 
             Ok(())
