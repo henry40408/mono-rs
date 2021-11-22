@@ -182,13 +182,15 @@ impl<'a> From<Scraped<'a>> for NewScrape {
                 user_id: d.params.user_id,
                 url: d.params.url.to_string(),
                 headless: d.params.headless,
-                content: d.html.into_bytes(),
+                content: d.html.as_bytes().to_vec(),
+                searchable_content: Some(d.html),
             },
             Scraped::Blob(b) => Self {
                 user_id: b.params.user_id,
                 url: b.params.url.to_string(),
                 headless: b.params.headless,
                 content: b.content.to_vec(),
+                searchable_content: None,
             },
         }
     }

@@ -5,6 +5,7 @@ table! {
         url -> Text,
         headless -> Bool,
         content -> Binary,
+        searchable_content -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }

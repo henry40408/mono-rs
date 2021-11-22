@@ -128,7 +128,7 @@ impl<'a> Authentication<'a> {
 }
 
 /// Scrape
-#[derive(Debug, Queryable, Insertable)]
+#[derive(Debug, Queryable)]
 pub struct Scrape {
     /// Primary key
     pub id: i32,
@@ -140,6 +140,8 @@ pub struct Scrape {
     pub headless: bool,
     /// Actual content from URL
     pub content: Vec<u8>,
+    /// Optional searchable content, must be string
+    pub searchable_content: Option<String>,
     /// When the URL is scraped
     pub created_at: NaiveDateTime,
 }
@@ -149,14 +151,19 @@ pub struct Scrape {
 pub struct SearchScrape {
     /// Search URL
     pub url: Option<String>,
+    /// Search content
+    pub content: Option<String>,
 }
 
 impl Scrape {
     /// Find scrape with ID
-    pub fn find(conn:&SqliteConnection, id:i32) ->anyhow::Result<Scrape> {
+    pub fn find(conn: &SqliteConnection, id: i32) -> anyhow::Result<Scrape> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
-        dsl::scrapes.find(id).first(conn).context("cannot find scrape with ID")
+        dsl::scrapes
+            .find(id)
+            .first(conn)
+            .context("cannot find scrape with ID")
     }
 
     /// Search scrapes with parameters
@@ -166,9 +173,13 @@ impl Scrape {
 
         let mut query = dsl::scrapes.into_boxed();
 
-        let url = params.url.as_ref().map(|u| format!("%{}%", u));
-        if let Some(url) = url {
-            query = query.filter(dsl::url.like(url));
+        if let Some(ref url) = params.url {
+            let u = format!("%{}%", url);
+            query = query.filter(dsl::url.like(u));
+        }
+        if let Some(ref content) = params.content {
+            let c = format!("%{}%", content);
+            query = query.filter(dsl::searchable_content.like(c));
         }
 
         query
@@ -188,6 +199,8 @@ pub struct NewScrape {
     pub headless: bool,
     /// Actual content from URL
     pub content: Vec<u8>,
+    /// Searchable content
+    pub searchable_content: Option<String>,
 }
 
 impl NewScrape {
@@ -203,6 +216,7 @@ impl NewScrape {
             user_id: user.id,
             headless: self.headless,
             content: self.content.clone(),
+            searchable_content: self.searchable_content.clone(),
         };
         new_scrape.save(conn)
     }
@@ -220,6 +234,8 @@ pub struct StrictNewScrape {
     pub headless: bool,
     /// Actual content from URL
     pub content: Vec<u8>,
+    /// Optional searchable content
+    pub searchable_content: Option<String>,
 }
 
 impl StrictNewScrape {

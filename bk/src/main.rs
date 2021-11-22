@@ -1,25 +1,25 @@
 #![deny(
-missing_docs,
-missing_debug_implementations,
-missing_copy_implementations,
-trivial_casts,
-trivial_numeric_casts,
-unsafe_code,
-unstable_features,
-unused_import_braces,
-unused_qualifications
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unstable_features,
+    unused_import_braces,
+    unused_qualifications
 )]
 
 //! Bookmark or bucket service
 
-use std::io;
-use std::io::Write;
 use anyhow::bail;
 use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::{connect_database, migrate_database, Scraped, Scraper};
 use chrono::Utc;
 use comfy_table::Table;
 use diesel::SqliteConnection;
+use std::io;
+use std::io::Write;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -39,6 +39,9 @@ enum Commands {
         #[structopt(short, long)]
         /// URL to be searched
         url: Option<String>,
+        #[structopt(short, long)]
+        /// Content
+        content: Option<String>,
     },
     /// Scrape and save to database
     Save {
@@ -86,7 +89,10 @@ async fn main() -> anyhow::Result<()> {
     let commands = Commands::from_args();
     match commands {
         Commands::Scrape { ref urls, .. } => scrape(urls).await?,
-        Commands::Search { ref url } => search(url).await?,
+        Commands::Search { url, content } => {
+            let params = SearchScrape { url, content };
+            search(&params).await?
+        }
         Commands::Save { ref urls, headless } => save_many(urls, headless).await?,
         Commands::Show { id } => show(&conn, id)?,
         Commands::User(u) => match u {
@@ -155,18 +161,21 @@ async fn scrape(urls: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn search(url: &Option<String>) -> anyhow::Result<()> {
-    let params = SearchScrape {
-        url: url.to_owned(),
-    };
-
+async fn search(params: &SearchScrape) -> anyhow::Result<()> {
     let conn = connect_database()?;
-    let scrapes = Scrape::search(&conn, &params)?;
+    let scrapes = Scrape::search(&conn, params)?;
 
     println!("total {}", scrapes.len());
 
     let mut table = Table::new();
-    table.set_header(vec!["ID", "URL", "Headless?", "Created at", "Size"]);
+    table.set_header(vec![
+        "ID",
+        "URL",
+        "Headless?",
+        "Created at",
+        "Size",
+        "Searchable?",
+    ]);
     for scrape in scrapes {
         let created_at = chrono::DateTime::<Utc>::from_utc(scrape.created_at, Utc);
         table.add_row(vec![
@@ -175,6 +184,7 @@ async fn search(url: &Option<String>) -> anyhow::Result<()> {
             scrape.headless.to_string(),
             created_at.to_rfc3339(),
             scrape.content.len().to_string(),
+            scrape.searchable_content.is_some().to_string(),
         ]);
     }
     println!("{}", table);
