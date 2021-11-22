@@ -46,7 +46,10 @@ impl User {
 
         let res = dsl::users.select(count(dsl::id)).first(conn);
         if Ok(1) != res {
-            bail!("more than one user found")
+            match res {
+                Ok(c) => bail!("{} user(s) found", c),
+                Err(_e) => bail!("more than one user(s) found"),
+            }
         }
 
         let query = dsl::users.into_boxed();
@@ -129,6 +132,8 @@ impl<'a> Authentication<'a> {
 pub struct Scrape {
     /// Primary key
     pub id: i32,
+    /// User ID
+    pub user_id: i32,
     /// URL to be scraped
     pub url: String,
     /// Scrape with headless Chromium
@@ -165,12 +170,13 @@ impl Scrape {
     }
 }
 
-/// New scrape to database
-#[derive(Debug, Insertable)]
-#[table_name = "scrapes"]
+/// New scrape
+#[derive(Debug)]
 pub struct NewScrape {
     /// URL scraped
     pub url: String,
+    /// Optional user ID
+    pub user_id: Option<i32>,
     /// Scrape with headless Chromium
     pub headless: bool,
     /// Actual content from URL
@@ -179,14 +185,45 @@ pub struct NewScrape {
 
 impl NewScrape {
     /// Save scrape
-    pub fn save(&self, conn: &SqliteConnection) -> diesel::result::QueryResult<()> {
+    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
+        let res = match self.user_id {
+            None => User::single(conn),
+            Some(id) => User::find(conn, id),
+        };
+        let user = res?;
+        let new_scrape = StrictNewScrape {
+            url: self.url.to_string(),
+            user_id: user.id,
+            headless: self.headless,
+            content: self.content.clone(),
+        };
+        new_scrape.save(conn)
+    }
+}
+
+/// New scrape to database
+#[derive(Debug, Insertable)]
+#[table_name = "scrapes"]
+pub struct StrictNewScrape {
+    /// URL scraped
+    pub url: String,
+    /// User ID
+    pub user_id: i32,
+    /// Scrape with headless Chromium
+    pub headless: bool,
+    /// Actual content from URL
+    pub content: Vec<u8>,
+}
+
+impl StrictNewScrape {
+    fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
 
         diesel::insert_into(dsl::scrapes)
             .values(self)
-            .execute(conn)?;
-        Ok(())
+            .execute(conn)
+            .context("failed to save scrape")
     }
 }
 
@@ -253,10 +290,17 @@ mod test {
 
         let scraper = Scraper::from_url("https://www.example.com");
         let scraped = scraper.scrape().await?;
-        let new_scrape = NewScrape::from(scraped);
-
         conn.test_transaction::<_, Error, _>(|| {
-            new_scrape.save(&conn)?;
+            let username = "user";
+            let password = "password";
+
+            let new_user = NewUser { username, password };
+            new_user.save(&conn).unwrap();
+
+            let new_scrape = NewScrape::from(scraped);
+            let res = new_scrape.save(&conn);
+            let rows_affected = res.unwrap();
+            assert_eq!(1, rows_affected);
 
             let mut params = SearchScrape::default();
             params.url = Some("example".into());

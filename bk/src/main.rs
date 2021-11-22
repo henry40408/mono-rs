@@ -95,6 +95,8 @@ fn add_user(username: &str) -> anyhow::Result<()> {
 
     if password.is_empty() {
         bail!("password is required")
+    } else {
+        eprintln!("read {} byte(s) as password", password.len());
     }
 
     let conn = connect_database()?;
@@ -191,6 +193,7 @@ async fn save(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow::Res
 #[cfg(test)]
 mod test {
     use crate::save;
+    use bk::entities::NewUser;
     use bk::{connect_database, migrate_database};
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
@@ -204,11 +207,20 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_save_command() -> anyhow::Result<()> {
+    async fn test_save() -> anyhow::Result<()> {
         let conn = setup()?;
-        let url = "https://www.example.com";
+
         conn.begin_test_transaction()?;
+
+        let username = "user";
+        let password = "password";
+        let new_user = NewUser { username, password };
+
+        new_user.save(&conn).unwrap();
+
+        let url = "https://www.example.com";
         save(&conn, &url, false).await?;
+
         Ok(())
     }
 }

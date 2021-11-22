@@ -51,6 +51,8 @@ pub fn migrate_database(
 #[derive(Debug)]
 pub struct Scraper<'a> {
     url: &'a str,
+    /// Optional user ID
+    pub user_id: Option<i32>,
     /// Scrape with headless Chromium
     pub headless: bool,
 }
@@ -60,6 +62,7 @@ impl<'a> Scraper<'a> {
     pub fn from_url(url: &'a str) -> Self {
         Self {
             url,
+            user_id: None,
             headless: false,
         }
     }
@@ -176,11 +179,13 @@ impl<'a> From<Scraped<'a>> for NewScrape {
     fn from(scraped: Scraped<'a>) -> Self {
         match scraped {
             Scraped::Document(d) => Self {
+                user_id: d.params.user_id,
                 url: d.params.url.to_string(),
                 headless: d.params.headless,
                 content: d.html.into_bytes(),
             },
             Scraped::Blob(b) => Self {
+                user_id: b.params.user_id,
                 url: b.params.url.to_string(),
                 headless: b.params.headless,
                 content: b.content.to_vec(),
