@@ -1,8 +1,14 @@
 use anyhow::{bail, Context};
 use chrono::NaiveDateTime;
+use diesel::sql_types::{Nullable, Text};
 use diesel::SqliteConnection;
 
 use crate::schema::{scrapes, users};
+
+sql_function! {
+    /// LOWER(t)
+    fn lower(a: Nullable<Text>) -> Nullable<Text>;
+}
 
 /// User
 #[derive(Debug, Queryable)]
@@ -178,13 +184,16 @@ impl Scrape {
         let mut query = dsl::scrapes.into_boxed();
 
         if let Some(url) = params.url {
-            query = query.filter(dsl::url.like(format!("%{}%", url)));
+            query =
+                query.filter(lower(dsl::url.nullable()).like(format!("%{}%", url.to_lowercase())));
         }
         if let Some(title) = params.title {
-            query = query.filter(dsl::title.like(format!("%{}%", title)));
+            query = query.filter(lower(dsl::title).like(format!("%{}%", title.to_lowercase())));
         }
         if let Some(content) = params.content {
-            query = query.filter(dsl::searchable_content.like(format!("%{}%", content)));
+            query = query.filter(
+                lower(dsl::searchable_content).like(format!("%{}%", content.to_lowercase())),
+            );
         }
 
         query
