@@ -13,6 +13,7 @@ CREATE TABLE scrapes
     user_id            INTEGER             NOT NULL,
     url                VARCHAR             NOT NULL,
     headless           BOOLEAN             NOT NULL DEFAULT 'f',
+    title              VARCHAR,
     content            BLOB                NOT NULL,
     searchable_content TEXT,
     created_at         TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,

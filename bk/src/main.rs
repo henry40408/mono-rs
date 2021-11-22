@@ -42,6 +42,9 @@ enum Commands {
         #[structopt(short, long)]
         /// Content
         content: Option<String>,
+        #[structopt(short, long)]
+        /// Title
+        title: Option<String>,
     },
     /// Scrape and save to database
     Save {
@@ -89,8 +92,16 @@ async fn main() -> anyhow::Result<()> {
     let commands = Commands::from_args();
     match commands {
         Commands::Scrape { ref urls, .. } => scrape(urls).await?,
-        Commands::Search { url, content } => {
-            let params = SearchScrape { url, content };
+        Commands::Search {
+            url,
+            content,
+            title,
+        } => {
+            let params = SearchScrape {
+                url: url.as_deref(),
+                title: title.as_deref(),
+                content: content.as_deref(),
+            };
             search(&params).await?
         }
         Commands::Save { ref urls, headless } => save_many(urls, headless).await?,
@@ -161,7 +172,7 @@ async fn scrape(urls: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn search(params: &SearchScrape) -> anyhow::Result<()> {
+async fn search(params: &SearchScrape<'_>) -> anyhow::Result<()> {
     let conn = connect_database()?;
     let scrapes = Scrape::search(&conn, params)?;
 
@@ -173,6 +184,7 @@ async fn search(params: &SearchScrape) -> anyhow::Result<()> {
         "URL",
         "Headless?",
         "Created at",
+        "Title",
         "Size",
         "Searchable?",
     ]);
@@ -183,6 +195,10 @@ async fn search(params: &SearchScrape) -> anyhow::Result<()> {
             scrape.url,
             scrape.headless.to_string(),
             created_at.to_rfc3339(),
+            match scrape.title {
+                Some(t) => t,
+                None => "".into(),
+            },
             scrape.content.len().to_string(),
             scrape.searchable_content.is_some().to_string(),
         ]);

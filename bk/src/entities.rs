@@ -75,8 +75,8 @@ impl<'a> NewUser<'a> {
 
         let encrypted_password = bcrypt::hash(&self.password, bcrypt::DEFAULT_COST)?;
         let with_encrypted_password = NewUserWithEncryptedPassword {
-            username: self.username.to_string(),
-            encrypted_password,
+            username: self.username,
+            encrypted_password: &encrypted_password,
         };
 
         let affected_rows = diesel::insert_into(dsl::users)
@@ -89,11 +89,11 @@ impl<'a> NewUser<'a> {
 /// New user with encrypted password
 #[derive(Debug, Insertable)]
 #[table_name = "users"]
-pub struct NewUserWithEncryptedPassword {
+pub struct NewUserWithEncryptedPassword<'a> {
     /// Username
-    pub username: String,
+    pub username: &'a str,
     /// Encrypted password
-    pub encrypted_password: String,
+    pub encrypted_password: &'a str,
 }
 
 /// User authentication
@@ -138,6 +138,8 @@ pub struct Scrape {
     pub url: String,
     /// Scrape with headless Chromium
     pub headless: bool,
+    /// Optional title
+    pub title: Option<String>,
     /// Actual content from URL
     pub content: Vec<u8>,
     /// Optional searchable content, must be string
@@ -148,11 +150,13 @@ pub struct Scrape {
 
 /// Search parameters on scrapes
 #[derive(Debug, Default)]
-pub struct SearchScrape {
+pub struct SearchScrape<'a> {
     /// Search URL
-    pub url: Option<String>,
+    pub url: Option<&'a str>,
+    /// Search title
+    pub title: Option<&'a str>,
     /// Search content
-    pub content: Option<String>,
+    pub content: Option<&'a str>,
 }
 
 impl Scrape {
@@ -173,13 +177,14 @@ impl Scrape {
 
         let mut query = dsl::scrapes.into_boxed();
 
-        if let Some(ref url) = params.url {
-            let u = format!("%{}%", url);
-            query = query.filter(dsl::url.like(u));
+        if let Some(url) = params.url {
+            query = query.filter(dsl::url.like(format!("%{}%", url)));
         }
-        if let Some(ref content) = params.content {
-            let c = format!("%{}%", content);
-            query = query.filter(dsl::searchable_content.like(c));
+        if let Some(title) = params.title {
+            query = query.filter(dsl::title.like(format!("%{}%", title)));
+        }
+        if let Some(content) = params.content {
+            query = query.filter(dsl::searchable_content.like(format!("%{}%", content)));
         }
 
         query
@@ -190,20 +195,22 @@ impl Scrape {
 
 /// New scrape
 #[derive(Debug)]
-pub struct NewScrape {
+pub struct NewScrape<'a> {
     /// URL scraped
-    pub url: String,
+    pub url: &'a str,
     /// Optional user ID
     pub user_id: Option<i32>,
     /// Scrape with headless Chromium
     pub headless: bool,
+    /// Optional title,
+    pub title: Option<String>,
     /// Actual content from URL
     pub content: Vec<u8>,
     /// Searchable content
     pub searchable_content: Option<String>,
 }
 
-impl NewScrape {
+impl<'a> NewScrape<'a> {
     /// Save scrape
     pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
         let res = match self.user_id {
@@ -212,11 +219,12 @@ impl NewScrape {
         };
         let user = res?;
         let new_scrape = StrictNewScrape {
-            url: self.url.to_string(),
+            url: self.url,
             user_id: user.id,
             headless: self.headless,
+            title: self.title.as_deref(),
             content: self.content.clone(),
-            searchable_content: self.searchable_content.clone(),
+            searchable_content: self.searchable_content.as_deref(),
         };
         new_scrape.save(conn)
     }
@@ -225,20 +233,22 @@ impl NewScrape {
 /// New scrape to database
 #[derive(Debug, Insertable)]
 #[table_name = "scrapes"]
-pub struct StrictNewScrape {
+pub struct StrictNewScrape<'a> {
     /// URL scraped
-    pub url: String,
+    pub url: &'a str,
     /// User ID
     pub user_id: i32,
     /// Scrape with headless Chromium
     pub headless: bool,
+    /// Optional title
+    pub title: Option<&'a str>,
     /// Actual content from URL
     pub content: Vec<u8>,
     /// Optional searchable content
-    pub searchable_content: Option<String>,
+    pub searchable_content: Option<&'a str>,
 }
 
-impl StrictNewScrape {
+impl<'a> StrictNewScrape<'a> {
     fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
@@ -331,6 +341,9 @@ mod test {
             let res = Scrape::search(&conn, &params);
             let scrapes = res.unwrap();
             assert_eq!(1, scrapes.len());
+
+            let scrape = scrapes.first().unwrap();
+            assert_eq!(Some("Example Domain"), scrape.title.as_deref());
 
             Ok(())
         });

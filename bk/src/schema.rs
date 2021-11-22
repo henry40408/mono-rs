@@ -4,6 +4,7 @@ table! {
         user_id -> Integer,
         url -> Text,
         headless -> Bool,
+        title -> Nullable<Text>,
         content -> Binary,
         searchable_content -> Nullable<Text>,
         created_at -> Timestamp,

@@ -175,20 +175,22 @@ pub struct Document<'a> {
     pub html: String,
 }
 
-impl<'a> From<Scraped<'a>> for NewScrape {
+impl<'a> From<Scraped<'a>> for NewScrape<'a> {
     fn from(scraped: Scraped<'a>) -> Self {
         match scraped {
             Scraped::Document(d) => Self {
                 user_id: d.params.user_id,
-                url: d.params.url.to_string(),
+                url: d.params.url,
                 headless: d.params.headless,
+                title: Some(d.title),
                 content: d.html.as_bytes().to_vec(),
                 searchable_content: Some(d.html),
             },
             Scraped::Blob(b) => Self {
                 user_id: b.params.user_id,
-                url: b.params.url.to_string(),
+                url: b.params.url,
                 headless: b.params.headless,
+                title: None,
                 content: b.content.to_vec(),
                 searchable_content: None,
             },
