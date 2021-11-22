@@ -15,12 +15,16 @@
 use anyhow::bail;
 use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::{connect_database, migrate_database, Scraped, Scraper};
-use chrono::Utc;
+use chrono::{NaiveDateTime, TimeZone, Utc};
 use comfy_table::Table;
 use diesel::SqliteConnection;
 use std::io;
 use std::io::Write;
 use structopt::StructOpt;
+
+fn rfc3339(ndt: &NaiveDateTime) -> String {
+    Utc.timestamp(ndt.timestamp(), 0).to_rfc3339()
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(about, author)]
@@ -34,20 +38,20 @@ enum Commands {
         /// URLs to be scraped
         urls: Vec<String>,
     },
-    /// Search URL in database
-    Search {
+    /// List or search scrapes
+    List {
         #[structopt(short, long)]
-        /// URL to be searched
+        /// Search URL
         url: Option<String>,
         #[structopt(short, long)]
-        /// Content
+        /// Search content
         content: Option<String>,
         #[structopt(short, long)]
-        /// Title
+        /// Search title
         title: Option<String>,
     },
     /// Scrape and save to database
-    Save {
+    Add {
         #[structopt(long)]
         /// Scrape with headless Chromium?
         headless: bool,
@@ -55,9 +59,16 @@ enum Commands {
         /// URLs to be scraped
         urls: Vec<String>,
     },
-    /// Show scrape
+    /// Show scraped content
+    Content {
+        #[structopt(short, long)]
+        /// Primary key
+        id: i32,
+    },
+    /// Show metadata scraped
     Show {
         #[structopt(short, long)]
+        /// Primary key
         id: i32,
     },
     /// Manage users
@@ -92,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
     let commands = Commands::from_args();
     match commands {
         Commands::Scrape { ref urls, .. } => scrape(urls).await?,
-        Commands::Search {
+        Commands::List {
             url,
             content,
             title,
@@ -104,7 +115,8 @@ async fn main() -> anyhow::Result<()> {
             };
             search(&params).await?
         }
-        Commands::Save { ref urls, headless } => save_many(urls, headless).await?,
+        Commands::Add { ref urls, headless } => save_many(urls, headless).await?,
+        Commands::Content { id } => show_content(&conn, id)?,
         Commands::Show { id } => show(&conn, id)?,
         Commands::User(u) => match u {
             UserCommand::Add { ref username } => add_user(username)?,
@@ -117,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
 fn add_user(username: &str) -> anyhow::Result<()> {
     let mut password = String::new();
     std::io::stdin().read_line(&mut password)?;
-    password = password.trim().to_string();
+    password = password.trim().into();
 
     if password.is_empty() {
         bail!("password is required")
@@ -147,7 +159,7 @@ fn list_users() -> anyhow::Result<()> {
         table.add_row(vec![
             user.id.to_string(),
             user.username,
-            user.created_at.to_string(),
+            rfc3339(&user.created_at),
         ]);
     }
     println!("{}", table);
@@ -189,16 +201,12 @@ async fn search(params: &SearchScrape<'_>) -> anyhow::Result<()> {
         "Searchable?",
     ]);
     for scrape in scrapes {
-        let created_at = chrono::DateTime::<Utc>::from_utc(scrape.created_at, Utc);
         table.add_row(vec![
             scrape.id.to_string(),
             scrape.url,
             scrape.headless.to_string(),
-            created_at.to_rfc3339(),
-            match scrape.title {
-                Some(t) => t,
-                None => "".into(),
-            },
+            rfc3339(&scrape.created_at),
+            scrape.title.map_or("".to_string(), |t| t),
             scrape.content.len().to_string(),
             scrape.searchable_content.is_some().to_string(),
         ]);
@@ -236,12 +244,36 @@ async fn save_one(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow:
     Ok(())
 }
 
-fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
+fn show_content(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
     let scrape = Scrape::find(conn, id)?;
     let c = scrape.content;
     io::stdout().write_all(c.as_slice())?;
     io::stdout().flush()?;
     eprintln!("{} byte(s) written", c.len());
+    Ok(())
+}
+
+fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
+    let scrape = Scrape::find(conn, id)?;
+    let mut table = Table::new();
+    table.set_header(vec!["Name".to_string(), "Value".to_string()]);
+    table.add_row(vec!["ID".to_string(), scrape.id.to_string()]);
+    table.add_row(vec!["URL".into(), scrape.url]);
+    table.add_row(vec!["Headless?".into(), scrape.headless.to_string()]);
+    table.add_row(vec![
+        "Title".into(),
+        scrape.title.map_or("".to_string(), |t| t),
+    ]);
+    table.add_row(vec![
+        "Content Length".into(),
+        scrape.content.len().to_string(),
+    ]);
+    table.add_row(vec![
+        "Searchable?".into(),
+        scrape.searchable_content.is_some().to_string(),
+    ]);
+    table.add_row(vec!["Created at".into(), rfc3339(&scrape.created_at)]);
+    println!("{}", table);
     Ok(())
 }
 
