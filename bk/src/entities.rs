@@ -2,6 +2,7 @@ use anyhow::{bail, Context};
 use chrono::NaiveDateTime;
 use diesel::sql_types::{Nullable, Text};
 use diesel::SqliteConnection;
+use std::fmt::{Display, Formatter};
 
 use crate::schema::{scrapes, users};
 
@@ -165,6 +166,28 @@ pub struct SearchScrape<'a> {
     pub content: Option<&'a str>,
 }
 
+/// Traits of scrape e.g. headless? searchable?
+#[derive(Clone, Copy, Debug)]
+pub struct ScrapeTraits {
+    /// Scrape with headless Chromium?
+    headless: bool,
+    /// Searchable with SQL syntax?
+    searchable: bool,
+}
+
+impl Display for ScrapeTraits {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut properties = vec![];
+        if self.headless {
+            properties.push("headless");
+        }
+        if self.searchable {
+            properties.push("searchable");
+        }
+        write!(f, "{}", properties.join(","))
+    }
+}
+
 impl Scrape {
     /// Find scrape with ID
     pub fn find(conn: &SqliteConnection, id: i32) -> anyhow::Result<Scrape> {
@@ -199,6 +222,14 @@ impl Scrape {
         query
             .load::<Scrape>(conn)
             .context("failed to search scrapes")
+    }
+
+    /// Show properties
+    pub fn traits(&self) -> ScrapeTraits {
+        ScrapeTraits {
+            headless: self.headless,
+            searchable: self.searchable_content.is_some(),
+        }
     }
 }
 

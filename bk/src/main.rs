@@ -35,7 +35,7 @@ enum Commands {
         urls: Vec<String>,
     },
     /// List or search scrapes
-    List {
+    Search {
         #[structopt(short, long)]
         /// Search URL
         url: Option<String>,
@@ -99,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
     let commands = Commands::from_args();
     match commands {
         Commands::Scrape { ref urls, .. } => scrape(urls).await?,
-        Commands::List {
+        Commands::Search {
             url,
             content,
             title,
@@ -187,24 +187,18 @@ async fn search(params: &SearchScrape<'_>) -> anyhow::Result<()> {
     println!("total {}", scrapes.len());
 
     let mut table = Table::new();
-    table.set_header(vec![
-        "ID",
-        "URL",
-        "Headless?",
-        "Created at",
-        "Title",
-        "Size",
-        "Searchable?",
-    ]);
+    table.set_header(vec!["ID", "URL", "Created at", "Title", "Size", "Traits"]);
     for scrape in scrapes {
         table.add_row(vec![
             scrape.id.to_string(),
-            scrape.url,
-            scrape.headless.to_string(),
+            scrape.url.clone(),
             scrape.created_at.rfc3339(),
-            scrape.title.map_or("".to_string(), |t| t),
+            match scrape.title {
+                None => "".to_string(),
+                Some(ref t) => t.clone(),
+            },
             scrape.content.len().to_string(),
-            scrape.searchable_content.is_some().to_string(),
+            format!("{}", scrape.traits()),
         ]);
     }
     println!("{}", table);
