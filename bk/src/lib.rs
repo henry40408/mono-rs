@@ -32,6 +32,9 @@ pub mod schema;
 /// Database models
 pub mod entities;
 
+/// Prelude
+pub mod prelude;
+
 embed_migrations!();
 
 /// Build SQLite connection with environment variable

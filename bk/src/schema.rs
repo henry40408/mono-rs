@@ -1,7 +1,7 @@
 table! {
     scrapes (id) {
         id -> Integer,
-        user_id -> Integer,
+        user_id -> Nullable<Integer>,
         url -> Text,
         headless -> Bool,
         title -> Nullable<Text>,

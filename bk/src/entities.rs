@@ -139,7 +139,7 @@ pub struct Scrape {
     /// Primary key
     pub id: i32,
     /// User ID
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     /// URL to be scraped
     pub url: String,
     /// Scrape with headless Chromium
@@ -222,14 +222,12 @@ pub struct NewScrape<'a> {
 impl<'a> NewScrape<'a> {
     /// Save scrape
     pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
-        let res = match self.user_id {
-            None => User::single(conn),
-            Some(id) => User::find(conn, id),
-        };
-        let user = res?;
         let new_scrape = StrictNewScrape {
             url: self.url,
-            user_id: user.id,
+            user_id: match self.user_id {
+                Some(id) => Some(User::find(conn, id)?.id),
+                None => None,
+            },
             headless: self.headless,
             title: self.title.as_deref(),
             content: self.content.clone(),
@@ -246,7 +244,7 @@ pub struct StrictNewScrape<'a> {
     /// URL scraped
     pub url: &'a str,
     /// User ID
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     /// Scrape with headless Chromium
     pub headless: bool,
     /// Optional title

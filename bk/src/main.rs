@@ -14,17 +14,13 @@
 
 use anyhow::bail;
 use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
+use bk::prelude::*;
 use bk::{connect_database, migrate_database, Scraped, Scraper};
-use chrono::{NaiveDateTime, TimeZone, Utc};
 use comfy_table::Table;
 use diesel::SqliteConnection;
 use std::io;
 use std::io::Write;
 use structopt::StructOpt;
-
-fn rfc3339(ndt: &NaiveDateTime) -> String {
-    Utc.timestamp(ndt.timestamp(), 0).to_rfc3339()
-}
 
 #[derive(Debug, StructOpt)]
 #[structopt(about, author)]
@@ -159,7 +155,7 @@ fn list_users() -> anyhow::Result<()> {
         table.add_row(vec![
             user.id.to_string(),
             user.username,
-            rfc3339(&user.created_at),
+            user.created_at.rfc3339(),
         ]);
     }
     println!("{}", table);
@@ -205,7 +201,7 @@ async fn search(params: &SearchScrape<'_>) -> anyhow::Result<()> {
             scrape.id.to_string(),
             scrape.url,
             scrape.headless.to_string(),
-            rfc3339(&scrape.created_at),
+            scrape.created_at.rfc3339(),
             scrape.title.map_or("".to_string(), |t| t),
             scrape.content.len().to_string(),
             scrape.searchable_content.is_some().to_string(),
@@ -272,7 +268,7 @@ fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
         "Searchable?".into(),
         scrape.searchable_content.is_some().to_string(),
     ]);
-    table.add_row(vec!["Created at".into(), rfc3339(&scrape.created_at)]);
+    table.add_row(vec!["Created at".into(), scrape.created_at.rfc3339()]);
     println!("{}", table);
     Ok(())
 }
