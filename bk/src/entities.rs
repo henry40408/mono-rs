@@ -257,6 +257,16 @@ impl Scrape {
         Ok(scrapes)
     }
 
+    /// Delete one scrape
+    pub fn delete(conn: &SqliteConnection, id: i32) -> anyhow::Result<usize> {
+        use crate::schema::scrapes::dsl;
+        use diesel::prelude::*;
+
+        diesel::delete(dsl::scrapes.filter(dsl::id.eq(id)))
+            .execute(conn)
+            .context("failed to delete scrape")
+    }
+
     /// Show properties
     pub fn traits(&self) -> ScrapeTraits {
         ScrapeTraits {

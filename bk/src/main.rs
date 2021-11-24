@@ -65,6 +65,11 @@ enum Commands {
         /// Primary key
         id: i32,
     },
+    Delete {
+        #[structopt(short, long)]
+        /// Primary key
+        id: i32,
+    },
     /// Show metadata scraped
     Show {
         #[structopt(short, long)]
@@ -122,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
             headless,
         } => save_many(force, urls, headless).await?,
         Commands::Content { id } => show_content(&conn, id)?,
+        Commands::Delete { id } => delete(&conn, id)?,
         Commands::Show { id } => show(&conn, id)?,
         Commands::User(u) => match u {
             UserCommand::Add { ref username } => add_user(username)?,
@@ -273,6 +279,12 @@ fn show_content(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
     io::stdout().write_all(c.as_slice())?;
     io::stdout().flush()?;
     eprintln!("{} byte(s) written", c.len());
+    Ok(())
+}
+
+fn delete(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
+    let count = Scrape::delete(conn, id)?;
+    eprintln!("{} scrape(s) deleted", count);
     Ok(())
 }
 
