@@ -269,6 +269,8 @@ impl Scrape {
 /// New scrape
 #[derive(Debug)]
 pub struct NewScrape<'a> {
+    /// Overwrite if entry exists?
+    pub force: bool,
     /// URL scraped
     pub url: &'a str,
     /// Optional user ID
@@ -285,19 +287,29 @@ pub struct NewScrape<'a> {
 
 impl<'a> NewScrape<'a> {
     /// Save scrape
-    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
-        let new_scrape = StrictNewScrape {
-            url: self.url,
-            user_id: match self.user_id {
-                Some(id) => Some(User::find(conn, id)?.id),
-                None => None,
-            },
-            headless: self.headless,
-            title: self.title.as_deref(),
-            content: self.content.clone(),
-            searchable_content: self.searchable_content.as_deref(),
-        };
-        new_scrape.save(conn)
+    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<i32> {
+        use crate::schema::scrapes::dsl;
+        use diesel::prelude::*;
+
+        conn.transaction(|| {
+            if self.force {
+                diesel::delete(dsl::scrapes.filter(dsl::url.eq(self.url))).execute(conn)?;
+            }
+
+            let new_scrape = StrictNewScrape {
+                url: self.url,
+                user_id: match self.user_id {
+                    Some(id) => Some(User::find(conn, id)?.id),
+                    None => None,
+                },
+                headless: self.headless,
+                title: self.title.as_deref(),
+                content: self.content.clone(),
+                searchable_content: self.searchable_content.as_deref(),
+            };
+            let row_id = new_scrape.save(conn)?;
+            Ok(row_id)
+        })
     }
 }
 
@@ -320,14 +332,17 @@ pub struct StrictNewScrape<'a> {
 }
 
 impl<'a> StrictNewScrape<'a> {
-    fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
+    fn save(&self, conn: &SqliteConnection) -> anyhow::Result<i32> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
 
         diesel::insert_into(dsl::scrapes)
             .values(self)
             .execute(conn)
-            .context("failed to save scrape")
+            .context("failed to save scrape")?;
+
+        let row_id = diesel::select(last_insert_rowid).get_result::<i32>(conn)?;
+        Ok(row_id)
     }
 }
 

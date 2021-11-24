@@ -56,6 +56,8 @@ pub struct Scraper<'a> {
     url: &'a str,
     /// Optional user ID
     pub user_id: Option<i32>,
+    /// Overwrite if entry exists?
+    pub force: bool,
     /// Scrape with headless Chromium
     pub headless: bool,
 }
@@ -66,8 +68,15 @@ impl<'a> Scraper<'a> {
         Self {
             url,
             user_id: None,
+            force: false,
             headless: false,
         }
+    }
+
+    /// Set force flag
+    pub fn with_force(mut self, force: bool) -> Self {
+        self.force = force;
+        self
     }
 
     /// Scrap document or blob w/ or w/o headless Chromium
@@ -182,6 +191,7 @@ impl<'a> From<Scraped<'a>> for NewScrape<'a> {
     fn from(scraped: Scraped<'a>) -> Self {
         match scraped {
             Scraped::Document(d) => Self {
+                force: d.params.force,
                 user_id: d.params.user_id,
                 url: d.params.url,
                 headless: d.params.headless,
@@ -190,6 +200,7 @@ impl<'a> From<Scraped<'a>> for NewScrape<'a> {
                 searchable_content: Some(d.html),
             },
             Scraped::Blob(b) => Self {
+                force: b.params.force,
                 user_id: b.params.user_id,
                 url: b.params.url,
                 headless: b.params.headless,

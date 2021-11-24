@@ -49,6 +49,9 @@ enum Commands {
     },
     /// Scrape and save to database
     Add {
+        #[structopt(short, long)]
+        /// Overwrite if entry exists
+        force: bool,
         #[structopt(long)]
         /// Scrape with headless Chromium?
         headless: bool,
@@ -113,7 +116,11 @@ async fn main() -> anyhow::Result<()> {
             };
             search(&mut params).await?
         }
-        Commands::Add { ref urls, headless } => save_many(urls, headless).await?,
+        Commands::Add {
+            ref urls,
+            force,
+            headless,
+        } => save_many(force, urls, headless).await?,
         Commands::Content { id } => show_content(&conn, id)?,
         Commands::Show { id } => show(&conn, id)?,
         Commands::User(u) => match u {
@@ -226,12 +233,12 @@ async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn save_many(urls: &[String], headless: bool) -> anyhow::Result<()> {
+async fn save_many(force: bool, urls: &[String], headless: bool) -> anyhow::Result<()> {
     let conn = connect_database()?;
 
     let mut tasks = vec![];
     for url in urls {
-        tasks.push(save_one(&conn, url, headless));
+        tasks.push(save_one(&conn, force, url, headless));
     }
 
     let results = futures::future::join_all(tasks).await;
@@ -242,8 +249,14 @@ async fn save_many(urls: &[String], headless: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn save_one(conn: &SqliteConnection, url: &str, headless: bool) -> anyhow::Result<()> {
+async fn save_one(
+    conn: &SqliteConnection,
+    force: bool,
+    url: &str,
+    headless: bool,
+) -> anyhow::Result<()> {
     let mut scraper = Scraper::from_url(url);
+    scraper.force = force;
     scraper.headless = headless;
 
     let scraped = scraper.scrape().await?;
@@ -308,7 +321,7 @@ mod test {
         conn.begin_test_transaction()?;
 
         let url = "https://www.example.com";
-        save_one(&conn, &url, false).await?;
+        save_one(&conn, false, &url, false).await?;
 
         Ok(())
     }
