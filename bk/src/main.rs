@@ -18,6 +18,8 @@ use bk::prelude::*;
 use bk::{connect_database, migrate_database, Scraped, Scraper};
 use comfy_table::Table;
 use diesel::SqliteConnection;
+use env_logger::Env;
+use log::{debug, info};
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
@@ -101,6 +103,7 @@ enum UserCommand {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv().ok();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let conn = connect_database()?;
     migrate_database(&conn)?;
@@ -145,7 +148,7 @@ fn add_user(username: &str) -> anyhow::Result<()> {
     if password.is_empty() {
         bail!("password is required")
     } else {
-        eprintln!("read {} byte(s) as password", password.len());
+        debug!("read {} byte(s) as password", password.len());
     }
 
     let conn = connect_database()?;
@@ -278,13 +281,13 @@ fn show_content(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
     let c = scrape.content;
     io::stdout().write_all(c.as_slice())?;
     io::stdout().flush()?;
-    eprintln!("{} byte(s) written", c.len());
+    info!("{} byte(s) written", c.len());
     Ok(())
 }
 
 fn delete(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
     let count = Scrape::delete(conn, id)?;
-    eprintln!("{} scrape(s) deleted", count);
+    info!("{} scrape(s) deleted", count);
     Ok(())
 }
 
