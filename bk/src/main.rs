@@ -18,6 +18,7 @@ use bk::prelude::*;
 use bk::{connect_database, migrate_database, Scraped, Scraper};
 use comfy_table::Table;
 use diesel::SqliteConnection;
+use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 use structopt::StructOpt;
@@ -104,12 +105,13 @@ async fn main() -> anyhow::Result<()> {
             content,
             title,
         } => {
-            let params = SearchScrape {
+            let mut params = SearchScrape {
                 url: url.as_deref(),
                 title: title.as_deref(),
                 content: content.as_deref(),
+                users: Some(HashMap::<i32, User>::new()),
             };
-            search(&params).await?
+            search(&mut params).await?
         }
         Commands::Add { ref urls, headless } => save_many(urls, headless).await?,
         Commands::Content { id } => show_content(&conn, id)?,
@@ -180,17 +182,35 @@ async fn scrape(urls: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn search(params: &SearchScrape<'_>) -> anyhow::Result<()> {
+async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
     let conn = connect_database()?;
     let scrapes = Scrape::search(&conn, params)?;
 
     println!("total {}", scrapes.len());
 
     let mut table = Table::new();
-    table.set_header(vec!["ID", "URL", "Created at", "Title", "Size", "Traits"]);
+    table.set_header(vec![
+        "ID",
+        "User",
+        "URL",
+        "Created at",
+        "Title",
+        "Size",
+        "Traits",
+    ]);
     for scrape in scrapes {
         table.add_row(vec![
             scrape.id.to_string(),
+            match &params.users {
+                Some(users) => match &scrape.user_id {
+                    Some(uid) => match users.get(uid) {
+                        Some(user) => user.username.to_string(),
+                        None => "".to_string(),
+                    },
+                    None => "".to_string(),
+                },
+                None => "".to_string(),
+            },
             scrape.url.clone(),
             scrape.created_at.rfc3339(),
             match scrape.title {
@@ -270,7 +290,6 @@ fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod test {
     use crate::save_one;
-    use bk::entities::NewUser;
     use bk::{connect_database, migrate_database};
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
@@ -286,14 +305,7 @@ mod test {
     #[tokio::test]
     async fn test_save() -> anyhow::Result<()> {
         let conn = setup()?;
-
         conn.begin_test_transaction()?;
-
-        let username = "user";
-        let password = "password";
-        let new_user = NewUser { username, password };
-
-        new_user.save(&conn).unwrap();
 
         let url = "https://www.example.com";
         save_one(&conn, &url, false).await?;

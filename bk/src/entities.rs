@@ -1,7 +1,8 @@
 use anyhow::{bail, Context};
 use chrono::NaiveDateTime;
-use diesel::sql_types::{Nullable, Text};
+use diesel::sql_types::{Integer, Nullable, Text};
 use diesel::SqliteConnection;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 use crate::schema::{scrapes, users};
@@ -10,6 +11,12 @@ sql_function! {
     /// LOWER(t)
     fn lower(a: Nullable<Text>) -> Nullable<Text>;
 }
+
+no_arg_sql_function!(
+    last_insert_rowid,
+    Integer,
+    "Represents the SQL last_insert_row() function"
+);
 
 /// User
 #[derive(Debug, Queryable)]
@@ -76,7 +83,7 @@ pub struct NewUser<'a> {
 
 impl<'a> NewUser<'a> {
     /// Create user
-    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<usize> {
+    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<i32> {
         use crate::schema::users::dsl;
         use diesel::prelude::*;
 
@@ -86,10 +93,11 @@ impl<'a> NewUser<'a> {
             encrypted_password: &encrypted_password,
         };
 
-        let affected_rows = diesel::insert_into(dsl::users)
+        diesel::insert_into(dsl::users)
             .values(with_encrypted_password)
             .execute(conn)?;
-        Ok(affected_rows)
+        let row_id = diesel::select(last_insert_rowid).get_result::<i32>(conn)?;
+        Ok(row_id)
     }
 }
 
@@ -164,6 +172,8 @@ pub struct SearchScrape<'a> {
     pub title: Option<&'a str>,
     /// Search content
     pub content: Option<&'a str>,
+    /// Users to be loaded
+    pub users: Option<HashMap<i32, User>>,
 }
 
 /// Traits of scrape e.g. headless? searchable?
@@ -200,8 +210,12 @@ impl Scrape {
     }
 
     /// Search scrapes with parameters
-    pub fn search(conn: &SqliteConnection, params: &SearchScrape) -> anyhow::Result<Vec<Scrape>> {
+    pub fn search(
+        conn: &SqliteConnection,
+        params: &mut SearchScrape,
+    ) -> anyhow::Result<Vec<Scrape>> {
         use crate::schema::scrapes::dsl;
+        use crate::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
 
         let mut query = dsl::scrapes.into_boxed();
@@ -219,9 +233,28 @@ impl Scrape {
             );
         }
 
-        query
+        let scrapes: Vec<Scrape> = query
             .load::<Scrape>(conn)
-            .context("failed to search scrapes")
+            .context("failed to search scrapes")?;
+
+        if let Some(ref mut users) = params.users {
+            let mut user_ids = vec![];
+            for scrape in &scrapes {
+                if let Some(uid) = scrape.user_id {
+                    user_ids.push(uid);
+                }
+            }
+
+            let us: Vec<User> = users_dsl::users
+                .filter(users_dsl::id.eq_any(user_ids))
+                .load::<User>(conn)
+                .context("failed to load users")?;
+            for u in us {
+                users.insert(u.id, u);
+            }
+        }
+
+        Ok(scrapes)
     }
 
     /// Show properties
@@ -301,8 +334,8 @@ impl<'a> StrictNewScrape<'a> {
 #[cfg(test)]
 mod test {
     use diesel::connection::SimpleConnection;
-    use diesel::result::Error;
     use diesel::{Connection, SqliteConnection};
+    use std::collections::HashMap;
 
     use crate::embedded_migrations;
     use crate::entities::{Authentication, NewScrape, NewUser, Scrape, SearchScrape, User};
@@ -319,38 +352,39 @@ mod test {
     #[tokio::test]
     async fn test_authentication_find() -> anyhow::Result<()> {
         let conn = setup()?;
-        conn.test_transaction::<_, Error, _>(|| {
-            let username = "user";
-            let password = "password";
+        conn.begin_test_transaction()?;
 
-            let new_user = NewUser { username, password };
-            let res = new_user.save(&conn);
-            let rows_affected = res.unwrap();
-            assert_eq!(1, rows_affected);
+        let username = "user";
+        let password = "password";
 
-            let auth = Authentication { username, password };
-            let res = auth.authenticate(&conn);
-            let user = res.unwrap();
-            assert_eq!(user.username, username);
-            assert_ne!(user.encrypted_password, password);
+        let new_user = NewUser { username, password };
+        let res = new_user.save(&conn);
+        let rows_affected = res.unwrap();
+        assert_eq!(1, rows_affected);
 
-            let res = User::single(&conn);
-            let user = res.unwrap();
-            assert_eq!(user.username, username);
+        let auth = Authentication { username, password };
+        let res = auth.authenticate(&conn);
+        let user = res.unwrap();
+        assert_eq!(user.username, username);
+        assert_ne!(user.encrypted_password, password);
 
-            let res = User::find(&conn, user.id);
-            let found = res.unwrap();
-            assert_eq!(found.id, user.id);
+        let res = User::single(&conn);
+        let user = res.unwrap();
+        assert_eq!(user.username, username);
 
-            Ok(())
-        });
+        let res = User::find(&conn, user.id);
+        let found = res.unwrap();
+        assert_eq!(found.id, user.id);
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_search() -> anyhow::Result<()> {
         let conn = setup()?;
-        let scrapes = Scrape::search(&conn, &SearchScrape::default())?;
+        let mut params = SearchScrape::default();
+        let scrapes = Scrape::search(&conn, &mut params)?;
+        assert!(params.users.is_none());
         assert_eq!(0, scrapes.len());
         Ok(())
     }
@@ -358,33 +392,36 @@ mod test {
     #[tokio::test]
     async fn test_save_and_search() -> anyhow::Result<()> {
         let conn = setup()?;
+        conn.begin_test_transaction()?;
 
-        let scraper = Scraper::from_url("https://www.example.com");
+        let username = "user";
+        let password = "password";
+
+        let new_user = NewUser { username, password };
+        let user_id = new_user.save(&conn).unwrap();
+
+        let mut scraper = Scraper::from_url("https://www.example.com");
+        scraper.user_id = Some(user_id);
+
         let scraped = scraper.scrape().await?;
-        conn.test_transaction::<_, Error, _>(|| {
-            let username = "user";
-            let password = "password";
 
-            let new_user = NewUser { username, password };
-            new_user.save(&conn).unwrap();
+        let new_scrape = NewScrape::from(scraped);
+        let res = new_scrape.save(&conn);
+        let rows_affected = res.unwrap();
+        assert_eq!(1, rows_affected);
 
-            let new_scrape = NewScrape::from(scraped);
-            let res = new_scrape.save(&conn);
-            let rows_affected = res.unwrap();
-            assert_eq!(1, rows_affected);
+        let mut params = SearchScrape::default();
+        params.url = Some("example".into());
+        params.users = Some(HashMap::<i32, User>::new());
 
-            let mut params = SearchScrape::default();
-            params.url = Some("example".into());
+        let res = Scrape::search(&conn, &mut params);
+        assert_eq!(1, params.users.unwrap().len());
 
-            let res = Scrape::search(&conn, &params);
-            let scrapes = res.unwrap();
-            assert_eq!(1, scrapes.len());
+        let scrapes = res.unwrap();
+        assert_eq!(1, scrapes.len());
 
-            let scrape = scrapes.first().unwrap();
-            assert_eq!(Some("Example Domain"), scrape.title.as_deref());
-
-            Ok(())
-        });
+        let scrape = scrapes.first().unwrap();
+        assert_eq!(Some("Example Domain"), scrape.title.as_deref());
 
         Ok(())
     }
