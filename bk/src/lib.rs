@@ -1,13 +1,13 @@
 #![deny(
-    missing_docs,
-    missing_debug_implementations,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unstable_features,
-    unused_import_braces,
-    unused_qualifications
+missing_docs,
+missing_debug_implementations,
+missing_copy_implementations,
+trivial_casts,
+trivial_numeric_casts,
+unsafe_code,
+unstable_features,
+unused_import_braces,
+unused_qualifications
 )]
 
 //! Bookmark or bucket service
@@ -25,6 +25,7 @@ use failure::ResultExt;
 use headless_chrome::Browser;
 use scraper::{Html, Selector};
 use std::env;
+use reqwest::StatusCode;
 
 #[allow(missing_docs)]
 pub mod schema;
@@ -127,6 +128,11 @@ impl<'a> Scraper<'a> {
 
     async fn scrape_wo_headless_chromium(&'a self) -> anyhow::Result<Scraped<'a>> {
         let res = reqwest::get(self.url).await?;
+
+        if StatusCode::OK != res.status() && !self.force {
+            bail!("failed to fetch response: {}", res.status())
+        }
+
         let content = res.bytes().await?;
 
         if infer::is_image(&content) {
