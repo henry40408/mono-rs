@@ -10,7 +10,7 @@ CREATE UNIQUE INDEX index_users_on_username ON users (username);
 CREATE TABLE scrapes
 (
     id                 INTEGER PRIMARY KEY NOT NULL,
-    user_id            INTEGER,
+    user_id            INTEGER             NOT NULL,
     url                VARCHAR             NOT NULL,
     headless           BOOLEAN             NOT NULL DEFAULT 'f',
     title              VARCHAR,

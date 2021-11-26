@@ -148,7 +148,7 @@ pub struct Scrape {
     /// Primary key
     pub id: i32,
     /// User ID
-    pub user_id: Option<i32>,
+    pub user_id: i32,
     /// URL to be scraped
     pub url: String,
     /// Scrape with headless Chromium
@@ -240,9 +240,7 @@ impl Scrape {
         if let Some(ref mut users) = params.users {
             let mut user_ids = vec![];
             for scrape in &scrapes {
-                if let Some(uid) = scrape.user_id {
-                    user_ids.push(uid);
-                }
+                user_ids.push(scrape.user_id);
             }
 
             let us: Vec<User> = users_dsl::users
@@ -301,6 +299,11 @@ impl<'a> NewScrape<'a> {
         use crate::schema::scrapes::dsl;
         use diesel::prelude::*;
 
+        let user_id = match self.user_id {
+            None => bail!("user ID is required"),
+            Some(i) => i,
+        };
+
         conn.transaction(|| {
             if self.force {
                 diesel::delete(dsl::scrapes.filter(dsl::url.eq(self.url))).execute(conn)?;
@@ -308,10 +311,7 @@ impl<'a> NewScrape<'a> {
 
             let new_scrape = StrictNewScrape {
                 url: self.url,
-                user_id: match self.user_id {
-                    Some(id) => Some(User::find(conn, id)?.id),
-                    None => None,
-                },
+                user_id,
                 headless: self.headless,
                 title: self.title.as_deref(),
                 content: self.content.clone(),
@@ -330,7 +330,7 @@ pub struct StrictNewScrape<'a> {
     /// URL scraped
     pub url: &'a str,
     /// User ID
-    pub user_id: Option<i32>,
+    pub user_id: i32,
     /// Scrape with headless Chromium
     pub headless: bool,
     /// Optional title
@@ -425,8 +425,7 @@ mod test {
         let new_user = NewUser { username, password };
         let user_id = new_user.save(&conn).unwrap();
 
-        let mut scraper = Scraper::from_url("https://www.example.com");
-        scraper.user_id = Some(user_id);
+        let scraper = Scraper::from_url("https://www.example.com").with_user_id(user_id);
 
         let scraped = scraper.scrape().await?;
 

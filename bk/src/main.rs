@@ -51,6 +51,9 @@ enum Commands {
     },
     /// Scrape and save to database
     Add {
+        #[structopt(short, long, env = "USER_ID")]
+        /// User ID
+        user_id: i32,
         #[structopt(short, long)]
         /// Overwrite if entry exists
         force: bool,
@@ -125,10 +128,11 @@ async fn main() -> anyhow::Result<()> {
             search(&mut params).await?
         }
         Commands::Add {
-            ref urls,
+            user_id,
             force,
             headless,
-        } => save_many(force, urls, headless).await?,
+            ref urls,
+        } => save_many(user_id, force, urls, headless).await?,
         Commands::Content { id } => show_content(&conn, id)?,
         Commands::Delete { id } => delete(&conn, id)?,
         Commands::Show { id } => show(&conn, id)?,
@@ -218,11 +222,8 @@ async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
         table.add_row(vec![
             scrape.id.to_string(),
             match &params.users {
-                Some(users) => match &scrape.user_id {
-                    Some(uid) => match users.get(uid) {
-                        Some(user) => user.username.to_string(),
-                        None => "".to_string(),
-                    },
+                Some(users) => match users.get(&scrape.user_id) {
+                    Some(user) => user.username.to_string(),
                     None => "".to_string(),
                 },
                 None => "".to_string(),
@@ -242,12 +243,17 @@ async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn save_many(force: bool, urls: &[String], headless: bool) -> anyhow::Result<()> {
+async fn save_many(
+    user_id: i32,
+    force: bool,
+    urls: &[String],
+    headless: bool,
+) -> anyhow::Result<()> {
     let conn = connect_database()?;
 
     let mut tasks = vec![];
     for url in urls {
-        tasks.push(save_one(&conn, force, url, headless));
+        tasks.push(save_one(&conn, user_id, force, url, headless));
     }
 
     let results = futures::future::join_all(tasks).await;
@@ -260,13 +266,15 @@ async fn save_many(force: bool, urls: &[String], headless: bool) -> anyhow::Resu
 
 async fn save_one(
     conn: &SqliteConnection,
+    user_id: i32,
     force: bool,
     url: &str,
     headless: bool,
 ) -> anyhow::Result<()> {
-    let mut scraper = Scraper::from_url(url);
-    scraper.force = force;
-    scraper.headless = headless;
+    let scraper = Scraper::from_url(url)
+        .with_user_id(user_id)
+        .with_force(force)
+        .with_headless(headless);
 
     let scraped = scraper.scrape().await?;
 
@@ -318,6 +326,7 @@ fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
 #[cfg(test)]
 mod test {
     use crate::save_one;
+    use bk::entities::NewUser;
     use bk::{connect_database, migrate_database};
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
@@ -335,8 +344,13 @@ mod test {
         let conn = setup()?;
         conn.begin_test_transaction()?;
 
+        let username = "user";
+        let password = "password";
+        let user = NewUser { username, password };
+        let user_id = user.save(&conn)?;
+
         let url = "https://www.example.com";
-        save_one(&conn, false, &url, false).await?;
+        save_one(&conn, user_id, false, &url, false).await?;
 
         Ok(())
     }

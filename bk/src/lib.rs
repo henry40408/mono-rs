@@ -1,13 +1,13 @@
 #![deny(
-missing_docs,
-missing_debug_implementations,
-missing_copy_implementations,
-trivial_casts,
-trivial_numeric_casts,
-unsafe_code,
-unstable_features,
-unused_import_braces,
-unused_qualifications
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unstable_features,
+    unused_import_braces,
+    unused_qualifications
 )]
 
 //! Bookmark or bucket service
@@ -23,9 +23,9 @@ use anyhow::bail;
 use diesel::{Connection, SqliteConnection};
 use failure::ResultExt;
 use headless_chrome::Browser;
+use reqwest::StatusCode;
 use scraper::{Html, Selector};
 use std::env;
-use reqwest::StatusCode;
 
 #[allow(missing_docs)]
 pub mod schema;
@@ -74,9 +74,21 @@ impl<'a> Scraper<'a> {
         }
     }
 
+    /// Set user ID
+    pub fn with_user_id(mut self, user_id: i32) -> Self {
+        self.user_id = Some(user_id);
+        self
+    }
+
     /// Set force flag
     pub fn with_force(mut self, force: bool) -> Self {
         self.force = force;
+        self
+    }
+
+    /// Set headless flag
+    pub fn with_headless(mut self, headless: bool) -> Self {
+        self.headless = headless;
         self
     }
 
@@ -224,8 +236,7 @@ mod test {
 
     #[tokio::test]
     async fn test_scrape_with_headless_chromium() -> anyhow::Result<()> {
-        let mut scraper = Scraper::from_url("https://www.example.com");
-        scraper.headless = true;
+        let scraper = Scraper::from_url("https://www.example.com").with_headless(true);
 
         let scraped = scraper.scrape().await?;
         assert!(matches!(scraped, Scraped::Document(_)));
