@@ -5,7 +5,7 @@ use diesel::SqliteConnection;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
-use crate::schema::{scrapes, users};
+use crate::schema::{contents, scrapes, users};
 
 sql_function! {
     /// LOWER(t)
@@ -153,12 +153,10 @@ pub struct Scrape {
     pub url: String,
     /// Scrape with headless Chromium
     pub headless: bool,
+    /// Searchable
+    pub searchable: bool,
     /// Optional title
     pub title: Option<String>,
-    /// Actual content from URL
-    pub content: Vec<u8>,
-    /// Optional searchable content, must be string
-    pub searchable_content: Option<String>,
     /// When the URL is scraped
     pub created_at: NaiveDateTime,
 }
@@ -174,6 +172,8 @@ pub struct SearchScrape<'a> {
     pub content: Option<&'a str>,
     /// Users to be loaded
     pub users: Option<HashMap<i32, User>>,
+    /// Contents to be loaded
+    pub contents: Option<HashMap<i32, Content>>,
 }
 
 /// Traits of scrape e.g. headless? searchable?
@@ -214,6 +214,7 @@ impl Scrape {
         conn: &SqliteConnection,
         params: &mut SearchScrape,
     ) -> anyhow::Result<Vec<Scrape>> {
+        use crate::schema::contents::dsl as contents_dsl;
         use crate::schema::scrapes::dsl;
         use crate::schema::users::dsl as users_dsl;
         use diesel::prelude::*;
@@ -221,16 +222,21 @@ impl Scrape {
         let mut query = dsl::scrapes.into_boxed();
 
         if let Some(url) = params.url {
-            query =
-                query.filter(lower(dsl::url.nullable()).like(format!("%{}%", url.to_lowercase())));
+            let needle = format!("%{}%", url.to_lowercase());
+            query = query.filter(lower(dsl::url.nullable()).like(needle));
         }
         if let Some(title) = params.title {
-            query = query.filter(lower(dsl::title).like(format!("%{}%", title.to_lowercase())));
+            let needle = format!("%{}%", title.to_lowercase());
+            query = query.filter(lower(dsl::title).like(needle));
         }
-        if let Some(content) = params.content {
-            query = query.filter(
-                lower(dsl::searchable_content).like(format!("%{}%", content.to_lowercase())),
-            );
+
+        if params.content.is_some() {
+            let mut scrape_ids = vec![];
+            let contents = Content::search(conn, params)?;
+            for c in contents {
+                scrape_ids.push(c.scrape_id);
+            }
+            query = query.filter(dsl::id.eq_any(scrape_ids));
         }
 
         let scrapes: Vec<Scrape> = query
@@ -252,6 +258,17 @@ impl Scrape {
             }
         }
 
+        if let Some(ref mut contents) = params.contents {
+            let scrape_ids: Vec<i32> = scrapes.iter().map(|s| s.id).collect();
+            let cs: Vec<Content> = contents_dsl::contents
+                .filter(contents_dsl::scrape_id.eq_any(scrape_ids))
+                .load::<Content>(conn)
+                .context("failed to load contents")?;
+            for c in cs {
+                contents.insert(c.scrape_id, c);
+            }
+        }
+
         Ok(scrapes)
     }
 
@@ -269,8 +286,49 @@ impl Scrape {
     pub fn traits(&self) -> ScrapeTraits {
         ScrapeTraits {
             headless: self.headless,
-            searchable: self.searchable_content.is_some(),
+            searchable: self.searchable,
         }
+    }
+}
+
+/// Scrapped content
+#[derive(Debug, Queryable)]
+pub struct Content {
+    /// Primary key
+    pub id: i32,
+    /// Scrape ID,
+    pub scrape_id: i32,
+    /// Actual content from URL
+    pub content: Vec<u8>,
+    /// Optional searchable content, must be string
+    pub searchable_content: Option<String>,
+    /// Created at
+    pub created_at: NaiveDateTime,
+}
+
+impl Content {
+    /// Find scrapped content by scrape ID
+    pub fn find_by_scrape_id(conn: &SqliteConnection, scrape_id: i32) -> anyhow::Result<Content> {
+        use crate::schema::contents::dsl;
+        use diesel::prelude::*;
+        dsl::contents
+            .filter(dsl::scrape_id.eq(scrape_id))
+            .first(conn)
+            .context("failed to find content")
+    }
+
+    /// Search content
+    pub fn search(conn: &SqliteConnection, params: &SearchScrape) -> anyhow::Result<Vec<Content>> {
+        use crate::schema::contents::dsl;
+        use diesel::prelude::*;
+        let mut query = dsl::contents.into_boxed();
+        if let Some(content) = params.content {
+            let needle = format!("%{}%", content);
+            query = query.filter(lower(dsl::searchable_content).like(needle));
+        }
+        query
+            .load::<Content>(conn)
+            .context("failed to search content")
     }
 }
 
@@ -313,13 +371,48 @@ impl<'a> NewScrape<'a> {
                 url: self.url,
                 user_id,
                 headless: self.headless,
+                searchable: self.searchable_content.is_some(),
                 title: self.title.as_deref(),
-                content: self.content.clone(),
-                searchable_content: self.searchable_content.as_deref(),
             };
             let row_id = new_scrape.save(conn)?;
+
+            let new_content = NewContent {
+                scrape_id: row_id,
+                content: &self.content,
+                searchable_content: self.searchable_content.as_deref(),
+            };
+            new_content.save(conn)?;
+
             Ok(row_id)
         })
+    }
+}
+
+/// New content
+#[derive(Debug, Insertable)]
+#[table_name = "contents"]
+pub struct NewContent<'a> {
+    /// Scrape ID
+    pub scrape_id: i32,
+    /// Content
+    pub content: &'a [u8],
+    /// Searchable content
+    pub searchable_content: Option<&'a str>,
+}
+
+impl<'a> NewContent<'a> {
+    /// Save content to database
+    pub fn save(&self, conn: &SqliteConnection) -> anyhow::Result<i32> {
+        use crate::schema::contents::dsl;
+        use diesel::prelude::*;
+
+        diesel::insert_into(dsl::contents)
+            .values(self)
+            .execute(conn)
+            .context("failed to save content")?;
+
+        let row_id = diesel::select(last_insert_rowid).get_result::<i32>(conn)?;
+        Ok(row_id)
     }
 }
 
@@ -333,12 +426,10 @@ pub struct StrictNewScrape<'a> {
     pub user_id: i32,
     /// Scrape with headless Chromium
     pub headless: bool,
+    /// Searchable
+    pub searchable: bool,
     /// Optional title
     pub title: Option<&'a str>,
-    /// Actual content from URL
-    pub content: Vec<u8>,
-    /// Optional searchable content
-    pub searchable_content: Option<&'a str>,
 }
 
 impl<'a> StrictNewScrape<'a> {

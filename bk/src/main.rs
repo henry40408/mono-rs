@@ -13,7 +13,7 @@
 //! Bookmark or bucket service
 
 use anyhow::bail;
-use bk::entities::{NewScrape, NewUser, Scrape, SearchScrape, User};
+use bk::entities::{Content, NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::prelude::*;
 use bk::{connect_database, migrate_database, Scraped, Scraper};
 use comfy_table::Table;
@@ -124,6 +124,7 @@ async fn main() -> anyhow::Result<()> {
                 title: title.as_deref(),
                 content: content.as_deref(),
                 users: Some(HashMap::<i32, User>::new()),
+                contents: Some(HashMap::<i32, Content>::new()),
             };
             search(&mut params).await?
         }
@@ -161,7 +162,7 @@ fn add_user(username: &str) -> anyhow::Result<()> {
         password: &password,
     };
     let rows_affected = new_user.save(&conn)?;
-    println!("{} user(s) created", rows_affected);
+    info!("{} user(s) created", rows_affected);
 
     Ok(())
 }
@@ -234,7 +235,13 @@ async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
                 None => "".to_string(),
                 Some(ref t) => t.clone(),
             },
-            scrape.content.len().to_string(),
+            match params.contents {
+                None => "".to_string(),
+                Some(ref contents) => match contents.get(&scrape.id) {
+                    Some(ref content) => content.content.len().to_string(),
+                    None => "".to_string(),
+                },
+            },
             format!("{}", scrape.traits()),
         ]);
     }
@@ -285,11 +292,10 @@ async fn save_one(
 }
 
 fn show_content(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
-    let scrape = Scrape::find(conn, id)?;
-    let c = scrape.content;
-    io::stdout().write_all(c.as_slice())?;
+    let c = Content::find_by_scrape_id(conn, id)?;
+    io::stdout().write_all(c.content.as_slice())?;
     io::stdout().flush()?;
-    info!("{} byte(s) written", c.len());
+    info!("{} byte(s) written", c.content.len());
     Ok(())
 }
 
@@ -301,6 +307,7 @@ fn delete(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
 
 fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
     let scrape = Scrape::find(conn, id)?;
+    let content = Content::find_by_scrape_id(conn, id)?;
     let mut table = Table::new();
     table.set_header(vec!["Name".to_string(), "Value".to_string()]);
     table.add_row(vec!["ID".to_string(), scrape.id.to_string()]);
@@ -312,11 +319,11 @@ fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
     ]);
     table.add_row(vec![
         "Content Length".into(),
-        scrape.content.len().to_string(),
+        content.content.len().to_string(),
     ]);
     table.add_row(vec![
         "Searchable?".into(),
-        scrape.searchable_content.is_some().to_string(),
+        content.searchable_content.is_some().to_string(),
     ]);
     table.add_row(vec!["Created at".into(), scrape.created_at.rfc3339()]);
     println!("{}", table);
