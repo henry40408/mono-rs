@@ -1,5 +1,9 @@
 use diesel::sql_types::{Integer, Nullable, Text};
 
+pub use content::{Content, NewContent};
+pub use scrape::{NewScrape, Scrape, SearchScrape};
+pub use user::{Authentication, NewUser, User};
+
 sql_function! {
     /// LOWER(t)
     fn lower(a: Nullable<Text>) -> Nullable<Text>;
@@ -14,23 +18,18 @@ no_arg_sql_function!(
 /// Content
 pub mod content;
 
-pub use content::{Content, NewContent};
-
 /// Scrape
 pub mod scrape;
-
-pub use scrape::{NewScrape, Scrape, SearchScrape};
 
 /// User
 pub mod user;
 
-pub use user::{Authentication, NewUser, User};
-
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
-    use std::collections::HashMap;
 
     use crate::embedded_migrations;
     use crate::entities::{Authentication, NewScrape, NewUser, Scrape, SearchScrape, User};

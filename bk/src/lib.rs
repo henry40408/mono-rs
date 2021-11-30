@@ -14,9 +14,10 @@
 
 #[macro_use]
 extern crate diesel;
-
 #[macro_use]
 extern crate diesel_migrations;
+
+use std::env;
 
 use anyhow::bail;
 use diesel::{Connection, SqliteConnection};
@@ -24,7 +25,6 @@ use failure::ResultExt;
 use headless_chrome::Browser;
 use reqwest::StatusCode;
 use scraper::{Html, Selector};
-use std::env;
 
 #[allow(missing_docs)]
 pub mod schema;

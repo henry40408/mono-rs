@@ -1,8 +1,9 @@
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+
 use anyhow::{bail, Context};
 use chrono::NaiveDateTime;
 use diesel::SqliteConnection;
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
 
 use crate::entities::{last_insert_rowid, lower, Content, NewContent, User};
 use crate::schema::scrapes;

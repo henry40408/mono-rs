@@ -12,18 +12,20 @@
 
 //! Bookmark or bucket service
 
+use std::collections::HashMap;
+use std::io;
+use std::io::Write;
+
 use anyhow::bail;
-use bk::entities::{Content, NewScrape, NewUser, Scrape, SearchScrape, User};
-use bk::prelude::*;
-use bk::{connect_database, migrate_database, Scraped, Scraper};
 use comfy_table::Table;
 use diesel::SqliteConnection;
 use env_logger::Env;
 use log::{debug, info};
-use std::collections::HashMap;
-use std::io;
-use std::io::Write;
 use structopt::StructOpt;
+
+use bk::entities::{Content, NewScrape, NewUser, Scrape, SearchScrape, User};
+use bk::prelude::*;
+use bk::{connect_database, migrate_database, Scraped, Scraper};
 
 #[derive(Debug, StructOpt)]
 #[structopt(about, author)]
@@ -332,11 +334,11 @@ fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod test {
-    use crate::save_one;
-    use bk::entities::NewUser;
-    use bk::{connect_database, migrate_database};
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
+
+    use crate::entities::NewUser;
+    use crate::{connect_database, migrate_database, save_one};
 
     fn setup() -> anyhow::Result<SqliteConnection> {
         std::env::set_var("DATABASE_URL", "test.sqlite3");
