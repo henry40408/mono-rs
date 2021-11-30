@@ -238,7 +238,7 @@ async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
             match params.contents {
                 None => "".to_string(),
                 Some(ref contents) => match contents.get(&scrape.id) {
-                    Some(ref content) => content.content.len().to_string(),
+                    Some(content) => content.content.len().to_string(),
                     None => "".to_string(),
                 },
             },

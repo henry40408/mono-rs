@@ -18,7 +18,6 @@ extern crate diesel;
 #[macro_use]
 extern crate diesel_migrations;
 
-use crate::entities::NewScrape;
 use anyhow::bail;
 use diesel::{Connection, SqliteConnection};
 use failure::ResultExt;
@@ -203,31 +202,6 @@ pub struct Document<'a> {
     pub title: String,
     /// Raw HTML document
     pub html: String,
-}
-
-impl<'a> From<Scraped<'a>> for NewScrape<'a> {
-    fn from(scraped: Scraped<'a>) -> Self {
-        match scraped {
-            Scraped::Document(d) => Self {
-                force: d.params.force,
-                user_id: d.params.user_id,
-                url: d.params.url,
-                headless: d.params.headless,
-                title: Some(d.title),
-                content: d.html.as_bytes().to_vec(),
-                searchable_content: Some(d.html),
-            },
-            Scraped::Blob(b) => Self {
-                force: b.params.force,
-                user_id: b.params.user_id,
-                url: b.params.url,
-                headless: b.params.headless,
-                title: None,
-                content: b.content.to_vec(),
-                searchable_content: None,
-            },
-        }
-    }
 }
 
 #[cfg(test)]
