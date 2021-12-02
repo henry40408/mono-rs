@@ -23,68 +23,78 @@ use env_logger::Env;
 use log::{debug, info};
 use structopt::StructOpt;
 
+use crate::server::start_server;
 use bk::entities::{Content, NewScrape, NewUser, Scrape, SearchScrape, User};
 use bk::prelude::*;
 use bk::{connect_database, migrate_database, Scraped, Scraper};
+
+/// Web server
+mod server;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about, author)]
 enum Commands {
     /// Scrape web page with URL
     Scrape {
-        #[structopt(long)]
         /// Scrape with headless Chromium?
+        #[structopt(long)]
         headless: bool,
-        #[structopt(name = "URLS")]
         /// URLs to be scraped
+        #[structopt(name = "URLS")]
         urls: Vec<String>,
     },
     /// List or search scrapes
     Search {
-        #[structopt(short, long)]
         /// Search URL
+        #[structopt(short, long)]
         url: Option<String>,
-        #[structopt(short, long)]
         /// Search content
-        content: Option<String>,
         #[structopt(short, long)]
+        content: Option<String>,
         /// Search title
+        #[structopt(short, long)]
         title: Option<String>,
     },
     /// Scrape and save to database
     Add {
-        #[structopt(short, long, env = "USER_ID")]
         /// User ID
+        #[structopt(short, long, env = "USER_ID")]
         user_id: i32,
-        #[structopt(short, long)]
         /// Overwrite if entry exists
+        #[structopt(short, long)]
         force: bool,
-        #[structopt(long)]
         /// Scrape with headless Chromium?
+        #[structopt(long)]
         headless: bool,
-        #[structopt(name = "URLS")]
         /// URLs to be scraped
+        #[structopt(name = "URLS")]
         urls: Vec<String>,
     },
     /// Show scraped content
     Content {
-        #[structopt(short, long)]
         /// Primary key
+        #[structopt(short, long)]
         id: i32,
     },
     Delete {
-        #[structopt(short, long)]
         /// Primary key
+        #[structopt(short, long)]
         id: i32,
     },
     /// Show metadata scraped
     Show {
-        #[structopt(short, long)]
         /// Primary key
+        #[structopt(short, long)]
         id: i32,
     },
     /// Manage users
     User(UserCommand),
+    /// Start server
+    Server {
+        /// Bind to host:port
+        #[structopt(short, long, default_value = "0.0.0.0:3000", env = "BIND")]
+        bind: String,
+    },
 }
 
 /// Manage users
@@ -143,6 +153,7 @@ async fn main() -> anyhow::Result<()> {
             UserCommand::Add { ref username } => add_user(username)?,
             UserCommand::List => list_users()?,
         },
+        Commands::Server { ref bind } => start_server(bind).await?,
     }
     Ok(())
 }
@@ -337,8 +348,8 @@ mod test {
     use diesel::connection::SimpleConnection;
     use diesel::{Connection, SqliteConnection};
 
-    use crate::entities::NewUser;
     use crate::{connect_database, migrate_database, save_one};
+    use bk::entities::NewUser;
 
     fn setup() -> anyhow::Result<SqliteConnection> {
         std::env::set_var("DATABASE_URL", "test.sqlite3");
