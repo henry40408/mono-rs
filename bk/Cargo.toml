@@ -9,6 +9,7 @@ description = "Bookmark or bucket service"
 
 [dependencies]
 anyhow = "1"
+askama = "0.10"
 bcrypt = "0.10"
 chrono = { version = "0.4", default-features = false }
 comfy-table = "5.0"
