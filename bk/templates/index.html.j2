@@ -16,5 +16,10 @@
 </head>
 <body>
 <h1>bk</h1>
+{% for scrape in scrapes %}
+    <div>{{ scrape.unwrap_title() }}</div>
+    <div><a target="_blank" rel="nofollow" href="{{ scrape.url }}">{{ scrape.url }}</a></div>
+    <div>{{ scrape.traits() }}</div>
+{% endfor %}
 </body>
 </html>

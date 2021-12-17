@@ -119,6 +119,14 @@ impl Scrape {
             searchable: self.searchable,
         }
     }
+
+    /// Title or empty
+    pub fn unwrap_title(&self) -> &str {
+        match self.title {
+            Some(ref s) => s,
+            None => "",
+        }
+    }
 }
 
 /// Search parameters on scrapes
