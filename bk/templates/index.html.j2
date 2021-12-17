@@ -19,7 +19,7 @@
 {% for scrape in scrapes %}
     <div>{{ scrape.unwrap_title() }}</div>
     <div><a target="_blank" rel="nofollow" href="{{ scrape.url }}">{{ scrape.url }}</a></div>
-    <div>{{ scrape.traits() }}</div>
+    <div>by {{ search.username(scrape.user_id) }} at {{ scrape.created_at }} | {{ scrape.traits() }}</div>
 {% endfor %}
 </body>
 </html>

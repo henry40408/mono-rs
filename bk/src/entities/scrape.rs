@@ -144,6 +144,21 @@ pub struct SearchScrape<'a> {
     pub contents: Option<HashMap<i32, Content>>,
 }
 
+impl<'a> SearchScrape<'a> {
+    /// Return username or empty
+    pub fn username(&self, user_id: &i32) -> &str {
+        if let Some(ref users) = self.users {
+            if let Some(ref user) = users.get(user_id) {
+                &user.username
+            } else {
+                ""
+            }
+        } else {
+            ""
+        }
+    }
+}
+
 /// Traits of scrape e.g. headless? searchable?
 #[derive(Clone, Copy, Debug)]
 pub struct ScrapeTraits {

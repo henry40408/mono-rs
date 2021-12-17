@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
+use std::default::Default;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use warp::{Filter, Rejection, Reply};
@@ -13,8 +15,9 @@ struct State {
 
 #[derive(Template)]
 #[template(path = "index.html.j2")]
-struct IndexTemplate {
+struct IndexTemplate<'a> {
     scrapes: Vec<Scrape>,
+    search: SearchScrape<'a>,
 }
 
 fn with_state(
@@ -25,9 +28,12 @@ fn with_state(
 
 fn do_index(state: Arc<State>) -> anyhow::Result<String> {
     let conn = state.pool.get()?;
-    let mut search = SearchScrape::default();
+    let mut search = SearchScrape {
+        users: Some(HashMap::new()),
+        ..Default::default()
+    };
     let scrapes = Scrape::search(&conn, &mut search)?;
-    let t = IndexTemplate { scrapes };
+    let t = IndexTemplate { scrapes, search };
     Ok(format!("{}", t.render()?))
 }
 
