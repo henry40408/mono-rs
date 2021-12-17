@@ -2,7 +2,6 @@ use std::net::SocketAddr;
 use warp::{Filter, Rejection, Reply};
 
 use askama::Template;
-use bk::entities::Scrape;
 
 #[derive(Template)]
 #[template(path = "index.html.j2")]
