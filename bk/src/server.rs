@@ -6,7 +6,7 @@ use std::sync::Arc;
 use warp::{Filter, Rejection, Reply};
 
 use askama::Template;
-use bk::entities::{Scrape, SearchScrape};
+use bk::entities::{Entry, SearchScrape};
 use bk::{build_connection_pool, DBConnectionPool};
 
 struct State {
@@ -16,7 +16,7 @@ struct State {
 #[derive(Template)]
 #[template(path = "index.html.j2")]
 struct IndexTemplate<'a> {
-    scrapes: Vec<Scrape>,
+    scrapes: Vec<Entry>,
     search: SearchScrape<'a>,
 }
 
@@ -32,9 +32,9 @@ fn do_index(state: Arc<State>) -> anyhow::Result<String> {
         users: Some(HashMap::new()),
         ..Default::default()
     };
-    let scrapes = Scrape::search(&conn, &mut search)?;
+    let scrapes = Entry::search(&conn, &mut search)?;
     let t = IndexTemplate { scrapes, search };
-    Ok(format!("{}", t.render()?))
+    Ok(t.render()?)
 }
 
 fn index(state: Arc<State>) -> impl Reply {
@@ -46,9 +46,7 @@ fn index(state: Arc<State>) -> impl Reply {
 }
 
 fn index_filter(state: Arc<State>) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
-    warp::path::end()
-        .and(with_state(state))
-        .map(|state| index(state))
+    warp::path::end().and(with_state(state)).map(index)
 }
 
 /// Start web server

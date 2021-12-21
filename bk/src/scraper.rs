@@ -89,6 +89,7 @@ impl<'a> Scraper<'a> {
             params: self,
             title,
             html,
+            http_status: 0, // TODO get actual status code
         }))
     }
 
@@ -99,6 +100,7 @@ impl<'a> Scraper<'a> {
             bail!("failed to fetch response: {}", res.status())
         }
 
+        let http_status = i32::try_from(res.status().as_u16())?;
         let content = res.bytes().await?;
 
         if infer::is_image(&content) {
@@ -110,6 +112,7 @@ impl<'a> Scraper<'a> {
                 params: self,
                 mime_type,
                 content: content.to_vec(),
+                http_status,
             }))
         } else {
             let html = String::from_utf8_lossy(&content).to_string();
@@ -125,6 +128,7 @@ impl<'a> Scraper<'a> {
                 params: self,
                 title,
                 html,
+                http_status,
             }))
         }
     }
@@ -148,6 +152,8 @@ pub struct Blob<'a> {
     pub mime_type: infer::Type,
     /// Blob content
     pub content: Vec<u8>,
+    /// HTTP status
+    pub http_status: i32,
 }
 
 /// Scraped document
@@ -159,6 +165,8 @@ pub struct Document<'a> {
     pub title: String,
     /// Raw HTML document
     pub html: String,
+    /// HTTP status
+    pub http_status: i32,
 }
 
 #[cfg(test)]

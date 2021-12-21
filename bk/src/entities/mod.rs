@@ -1,7 +1,7 @@
 use diesel::sql_types::{Integer, Nullable, Text};
 
 pub use content::{Content, NewContent};
-pub use scrape::{NewScrape, Scrape, SearchScrape};
+pub use entry::{Entry, NewPartialEntry, SearchScrape};
 pub use user::{Authentication, NewUser, User};
 
 sql_function! {
@@ -19,7 +19,7 @@ no_arg_sql_function!(
 pub mod content;
 
 /// Scrape
-pub mod scrape;
+pub mod entry;
 
 /// User
 pub mod user;
@@ -32,7 +32,7 @@ mod test {
     use diesel::{Connection, SqliteConnection};
 
     use crate::embedded_migrations;
-    use crate::entities::{Authentication, NewScrape, NewUser, Scrape, SearchScrape, User};
+    use crate::entities::{Authentication, Entry, NewPartialEntry, NewUser, SearchScrape, User};
     use crate::{connect_database, Scraper};
 
     fn setup() -> anyhow::Result<SqliteConnection> {
@@ -77,7 +77,7 @@ mod test {
     async fn test_search() -> anyhow::Result<()> {
         let conn = setup()?;
         let mut params = SearchScrape::default();
-        let scrapes = Scrape::search(&conn, &mut params)?;
+        let scrapes = Entry::search(&conn, &mut params)?;
         assert!(params.users.is_none());
         assert_eq!(0, scrapes.len());
         Ok(())
@@ -98,7 +98,7 @@ mod test {
 
         let scraped = scraper.scrape().await?;
 
-        let new_scrape = NewScrape::from(scraped);
+        let new_scrape = NewPartialEntry::from(scraped);
         let res = new_scrape.save(&conn);
         let rows_affected = res.unwrap();
         assert_eq!(1, rows_affected);
@@ -107,7 +107,7 @@ mod test {
         params.url = Some("example".into());
         params.users = Some(HashMap::<i32, User>::new());
 
-        let res = Scrape::search(&conn, &mut params);
+        let res = Entry::search(&conn, &mut params);
         assert_eq!(1, params.users.unwrap().len());
 
         let scrapes = res.unwrap();

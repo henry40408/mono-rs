@@ -22,11 +22,11 @@ pub struct Content {
 
 impl Content {
     /// Find scrapped content by scrape ID
-    pub fn find_by_scrape_id(conn: &SqliteConnection, scrape_id: i32) -> anyhow::Result<Content> {
+    pub fn find_by_scrape_id(conn: &SqliteConnection, entry_id: i32) -> anyhow::Result<Content> {
         use crate::schema::contents::dsl;
         use diesel::prelude::*;
         dsl::contents
-            .filter(dsl::scrape_id.eq(scrape_id))
+            .filter(dsl::entry_id.eq(entry_id))
             .first(conn)
             .context("failed to find content")
     }
@@ -50,8 +50,8 @@ impl Content {
 #[derive(Debug, Insertable)]
 #[table_name = "contents"]
 pub struct NewContent<'a> {
-    /// Scrape ID
-    pub scrape_id: i32,
+    /// Entry ID
+    pub entry_id: i32,
     /// Content
     pub content: &'a [u8],
     /// Searchable content

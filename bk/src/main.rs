@@ -24,7 +24,7 @@ use log::{debug, info};
 use structopt::StructOpt;
 
 use crate::server::start_server;
-use bk::entities::{Content, NewScrape, NewUser, Scrape, SearchScrape, User};
+use bk::entities::{Content, Entry, NewPartialEntry, NewUser, SearchScrape, User};
 use bk::prelude::*;
 use bk::{connect_database, migrate_database, Scraped, Scraper};
 
@@ -218,7 +218,7 @@ async fn scrape(urls: &[String]) -> anyhow::Result<()> {
 
 async fn search(params: &mut SearchScrape<'_>) -> anyhow::Result<()> {
     let conn = connect_database()?;
-    let scrapes = Scrape::search(&conn, params)?;
+    let scrapes = Entry::search(&conn, params)?;
 
     println!("total {}", scrapes.len());
 
@@ -298,7 +298,7 @@ async fn save_one(
 
     let scraped = scraper.scrape().await?;
 
-    let new_scrape = NewScrape::from(scraped);
+    let new_scrape = NewPartialEntry::from(scraped);
     new_scrape.save(conn)?;
 
     Ok(())
@@ -313,13 +313,13 @@ fn show_content(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
 }
 
 fn delete(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
-    let count = Scrape::delete(conn, id)?;
+    let count = Entry::delete(conn, id)?;
     info!("{} scrape(s) deleted", count);
     Ok(())
 }
 
 fn show(conn: &SqliteConnection, id: i32) -> anyhow::Result<()> {
-    let scrape = Scrape::find(conn, id)?;
+    let scrape = Entry::find(conn, id)?;
     let content = Content::find_by_scrape_id(conn, id)?;
     let mut table = Table::new();
     table.set_header(vec!["Name".to_string(), "Value".to_string()]);
