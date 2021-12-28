@@ -110,6 +110,12 @@ enum UserCommand {
         /// Username
         #[structopt(short, long)]
         username: String,
+        /// E-mail
+        #[structopt(short, long)]
+        email: String,
+        /// Name
+        #[structopt(short, long)]
+        name: String,
     },
     /// List users
     List,
@@ -150,7 +156,11 @@ async fn main() -> anyhow::Result<()> {
         Commands::Delete { id } => delete(&conn, id)?,
         Commands::Show { id } => show(&conn, id)?,
         Commands::User(u) => match u {
-            UserCommand::Add { ref username } => add_user(username)?,
+            UserCommand::Add {
+                ref username,
+                ref email,
+                ref name,
+            } => add_user(username, email, name)?,
             UserCommand::List => list_users()?,
         },
         Commands::Server { ref bind } => start_server(bind).await?,
@@ -158,7 +168,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn add_user(username: &str) -> anyhow::Result<()> {
+fn add_user(username: &str, email: &str, name: &str) -> anyhow::Result<()> {
     let mut password = String::new();
     std::io::stdin().read_line(&mut password)?;
     password = password.trim().into();
@@ -173,6 +183,8 @@ fn add_user(username: &str) -> anyhow::Result<()> {
     let new_user = NewUser {
         username,
         password: &password,
+        email,
+        name,
     };
     let rows_affected = new_user.save(&conn)?;
     info!("{} user(s) created", rows_affected);
@@ -366,7 +378,15 @@ mod test {
 
         let username = "user";
         let password = "password";
-        let user = NewUser { username, password };
+        let email = "user@example.com";
+        let name = "User";
+
+        let user = NewUser {
+            username,
+            password,
+            email,
+            name,
+        };
         let user_id = user.save(&conn)?;
 
         let url = "https://www.example.com";

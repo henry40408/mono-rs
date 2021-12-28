@@ -50,8 +50,15 @@ mod test {
 
         let username = "user";
         let password = "password";
+        let email = "user@example.com";
+        let name = "User";
 
-        let new_user = NewUser { username, password };
+        let new_user = NewUser {
+            username,
+            password,
+            email,
+            name,
+        };
         let res = new_user.save(&conn);
         let rows_affected = res.unwrap();
         assert_eq!(1, rows_affected);
@@ -90,8 +97,15 @@ mod test {
 
         let username = "user";
         let password = "password";
+        let email = "user@example.com";
+        let name = "User";
 
-        let new_user = NewUser { username, password };
+        let new_user = NewUser {
+            username,
+            password,
+            email,
+            name,
+        };
         let user_id = new_user.save(&conn).unwrap();
 
         let scraper = Scraper::from_url("https://www.example.com").with_user_id(user_id);

@@ -37,9 +37,12 @@ table! {
 table! {
     users (id) {
         id -> Integer,
+        name -> Text,
         username -> Text,
-        encrypted_password -> Text,
+        email -> Text,
         created_at -> Timestamp,
+        updated_at -> Timestamp,
+        encrypted_password -> Text,
     }
 }
 

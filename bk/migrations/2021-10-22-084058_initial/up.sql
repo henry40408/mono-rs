@@ -1,12 +1,17 @@
+-- ref: https://git.io/Jy0Nk
 CREATE TABLE users
 (
     id                 INTEGER PRIMARY KEY NOT NULL,
+    name               VARCHAR             NOT NULL,
     username           VARCHAR             NOT NULL,
-    encrypted_password VARCHAR             NOT NULL,
-    created_at         TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP
+    email              VARCHAR             NOT NULL,
+    created_at         TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    encrypted_password VARCHAR             NOT NULL
 );
 CREATE UNIQUE INDEX index_users_on_username ON users (username);
 
+-- ref: https://git.io/Jy0bx
 CREATE TABLE entries
 (
     id              INTEGER PRIMARY KEY NOT NULL,

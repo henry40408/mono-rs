@@ -10,12 +10,18 @@ use crate::schema::users;
 pub struct User {
     /// Primary key
     pub id: i32,
+    /// Name
+    pub name: String,
     /// Username
     pub username: String,
-    /// Encrypted password
-    pub encrypted_password: String,
+    /// E-mail
+    pub email: String,
     /// When the user is created
     pub created_at: NaiveDateTime,
+    /// When the user is updated
+    pub updated_at: NaiveDateTime,
+    /// Encrypted password
+    pub encrypted_password: String,
 }
 
 impl User {
@@ -66,6 +72,10 @@ pub struct NewUser<'a> {
     pub username: &'a str,
     /// Raw password, will be encrypted before save to database
     pub password: &'a str,
+    /// E-mail
+    pub email: &'a str,
+    /// Name
+    pub name: &'a str,
 }
 
 impl<'a> NewUser<'a> {
@@ -78,6 +88,8 @@ impl<'a> NewUser<'a> {
         let with_encrypted_password = NewUserWithEncryptedPassword {
             username: self.username,
             encrypted_password: &encrypted_password,
+            email: self.email,
+            name: self.name,
         };
 
         diesel::insert_into(dsl::users)
@@ -96,6 +108,10 @@ pub struct NewUserWithEncryptedPassword<'a> {
     pub username: &'a str,
     /// Encrypted password
     pub encrypted_password: &'a str,
+    /// E-mail
+    pub email: &'a str,
+    /// Name
+    pub name: &'a str,
 }
 
 /// User authentication
