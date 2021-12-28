@@ -60,11 +60,11 @@ async fn main() -> anyhow::Result<()> {
                 tokio::time::sleep(Duration::from_millis(999)).await;
             }
         }
-        let instant = Instant::now();
+        let start = Instant::now();
         let domain_names: Vec<_> = opts.domain_names.split(',').collect();
         check_domain_names(&opts, &domain_names).await?;
-        let duration = Instant::now() - instant;
-        info!("done in {}ms", duration.as_millis());
+        let elapsed = start.elapsed();
+        info!("done in {}ms", elapsed.as_millis());
     }
 
     Ok(())
