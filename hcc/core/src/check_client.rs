@@ -74,12 +74,12 @@ impl CheckClient {
         let mut stream = TcpStream::connect(format!("{0}:443", domain_name))?;
         let mut tls = rustls::Stream::new(&mut conn, &mut stream);
 
-        let origin = Instant::now();
+        let start = Instant::now();
         match tls.write(Self::build_http_headers(domain_name).as_bytes()) {
             Ok(_) => (),
             Err(_) => return Ok(CheckResult::expired(domain_name, &self.checked_at)),
         };
-        let elapsed = Instant::now() - origin;
+        let elapsed = start.elapsed();
 
         let certificates = tls
             .conn

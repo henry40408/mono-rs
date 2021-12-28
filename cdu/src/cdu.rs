@@ -86,10 +86,10 @@ impl<'a> Cdu<'a> {
             },
         };
 
-        let instant = Instant::now();
+        let start = Instant::now();
         let res: ApiSuccess<Vec<Zone>> = client.request(&params).await?;
-        let duration = Instant::now() - instant;
-        debug!("took {}ms to fetch zone identifier", duration.as_millis());
+        let elapsed = start.elapsed();
+        debug!("took {}ms to fetch zone identifier", elapsed.as_millis());
 
         let id = match res.result.first() {
             Some(zone) => zone.id.to_string(),
@@ -103,7 +103,7 @@ impl<'a> Cdu<'a> {
             "zone fetched from Cloudflare: {} ({})",
             &self.opts.zone, &id
         );
-        Ok((duration, id))
+        Ok((elapsed, id))
     }
 
     fn build_client(&self) -> anyhow::Result<Client> {
@@ -138,7 +138,7 @@ impl<'a> Cdu<'a> {
         *self.last_ip.borrow_mut() = Some(current_ip);
 
         let client = Arc::new(self.build_client()?);
-        let (duration1, zone_id) = self.get_zone_identifier(client.clone()).await?;
+        let (elapsed1, zone_id) = self.get_zone_identifier(client.clone()).await?;
 
         let mut tasks = vec![];
         for record_name in self.opts.record_name_list() {
@@ -175,15 +175,15 @@ impl<'a> Cdu<'a> {
         }
 
         let mut dns_record_ids = vec![];
-        let instant = Instant::now();
+        let start = Instant::now();
         for task in futures::future::join_all(tasks).await {
             let (dns_record_id, record_name) = task??;
             dns_record_ids.push((dns_record_id, record_name));
         }
-        let duration2 = Instant::now() - instant;
+        let elapsed2 = start.elapsed();
         debug!(
             "took {}ms to fetch record identifiers",
-            duration2.as_millis()
+            elapsed2.as_millis()
         );
 
         let mut tasks: Vec<JoinHandle<anyhow::Result<(String, String, String)>>> = vec![];
@@ -214,16 +214,16 @@ impl<'a> Cdu<'a> {
             }));
         }
 
-        let instant = Instant::now();
+        let start = Instant::now();
         for task in futures::future::join_all(tasks).await {
             let (r, d, c) = task??;
             debug!("DNS record updated: {} ({}) -> {}", &r, &d, &c);
         }
-        let duration3 = Instant::now() - instant;
-        debug!("took {}ms to update DNS records", duration3.as_millis());
+        let elapsed3 = start.elapsed();
+        debug!("took {}ms to update DNS records", elapsed3.as_millis());
 
-        info!("took {}ms to fetch zone record, {}ms to fetch DNS records, and {}ms to update DNS records", duration1.as_millis(),
-        duration2.as_millis(),duration3.as_millis());
+        info!("took {}ms to fetch zone record, {}ms to fetch DNS records, and {}ms to update DNS records", elapsed1.as_millis(),
+        elapsed2.as_millis(),elapsed3.as_millis());
 
         Ok(())
     }

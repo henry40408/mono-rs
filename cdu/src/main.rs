@@ -60,15 +60,15 @@ async fn run_daemon<'a>(cdu: Cdu<'_>) -> anyhow::Result<()> {
 
         let strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
         let cdu = cdu.clone();
-        let instant = Instant::now();
+        let start = Instant::now();
         tokio_retry::RetryIf::spawn(
             strategy,
             || cdu.run(),
             |e: &anyhow::Error| e.is::<ApiFailure>() || e.is::<PublicIPError>(),
         )
         .await?;
-        let duration = Instant::now() - instant;
-        info!("done in {}ms", duration.as_millis());
+        let elapsed = start.elapsed();
+        info!("done in {}ms", elapsed.as_millis());
     }
 
     Ok(())
