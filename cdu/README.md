@@ -23,8 +23,8 @@ $ cdu
 
 ```bash
 $ export CLOUDFLARE_TOKEN=[your Cloudflare token]
-$ CLOUDFLARE_ZONE=[name of your zone on Cloudflare]
-$ CLOUDFLARE_RECORDS=[name of DNS records on Cloudflare, separated by comma]
+$ export CLOUDFLARE_ZONE=[name of your zone on Cloudflare]
+$ export CLOUDFLARE_RECORDS=[name of DNS records on Cloudflare, separated by comma]
 $ cdu --daemon true
 ```
 

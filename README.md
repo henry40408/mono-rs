@@ -21,6 +21,8 @@
 ![os](https://img.shields.io/badge/os-linux%20%7C%20macos%20%7C%20windows-blue)
 ![libc](https://img.shields.io/badge/libc-gnu%20%7C%20musl%20%7C%20msvc-blue)
 
+> wfs supports Unix platform only
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
