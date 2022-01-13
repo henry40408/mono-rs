@@ -35,9 +35,9 @@ pub struct Attachment<'a> {
 
 impl<'a> Attachment<'a> {
     /// Creates an [`Attachment`]
-    pub fn new<S: Into<String>>(filename: S, mime_type: &'a str, content: &[u8]) -> Attachment<'a> {
+    pub fn new<S: ToString>(filename: S, mime_type: &'a str, content: &[u8]) -> Attachment<'a> {
         Self {
-            filename: filename.into(),
+            filename: filename.to_string(),
             mime_type,
             content: content.into(),
         }
@@ -58,11 +58,11 @@ impl<'a> Attachment<'a> {
 
     /// Creates an [`Attachment`] with URL string
     pub async fn from_url<T: AsRef<str>>(url: T) -> Result<Attachment<'a>, AttachmentError> {
-        let url = Url::parse(url.as_ref())?;
-        let filename = url
+        let parsed = Url::parse(url.as_ref())?;
+        let filename = parsed
             .path_segments()
             .map_or("filename", |t| t.last().map_or("filename", |t1| t1));
-        let res = reqwest::get(url.as_str()).await?;
+        let res = reqwest::get(parsed.as_str()).await?;
         let res = match res.error_for_status() {
             Ok(r) => r,
             Err(e) => return Err(AttachmentError::Reqwest(e)),
