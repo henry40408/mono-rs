@@ -86,7 +86,7 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
             let message = format!("{} {}", state_icon, sentence);
 
             let mut n = Notification::new(&opts.pushover_token, &opts.pushover_user, &message);
-            n.request.title = Some(&title);
+            n.title = Some(&title);
             n.send().await?;
 
             Ok::<(), anyhow::Error>(())

@@ -71,43 +71,27 @@ async fn main() -> anyhow::Result<()> {
     let opts: Opts = Opts::from_args();
 
     let mut notification = Notification::new(&opts.token, &opts.user, &opts.message);
+    notification.device = opts.device.as_deref();
+    notification.title = opts.title.as_deref();
+    notification.timestamp = opts.timestamp;
+    notification.priority = opts
+        .priority
+        .as_deref()
+        .and_then(|p| Priority::from_str(p).ok());
+    notification.sound = opts.sound.as_deref().and_then(|s| Sound::from_str(s).ok());
 
-    // set extra options
-    if let Some(ref d) = opts.device {
-        notification.request.device = Some(d);
-    }
-    if let Some(ref t) = opts.title {
-        notification.request.title = Some(t);
-    }
-    if let Some(ref t) = opts.timestamp {
-        notification.request.timestamp = Some(*t);
-    }
-    if let Some(ref p) = opts.priority {
-        notification.request.priority = Some(Priority::from_str(p)?);
-    }
-    if let Some(ref s) = opts.sound {
-        notification.request.sound = Some(Sound::from_str(s)?);
-    }
-    if let Some(ref u) = opts.url {
-        notification.request.url = Some(u);
-        if let Some(ref t) = opts.url_title {
-            notification.request.url_title = Some(t);
-        }
-    }
+    notification.url = opts.url.as_deref();
+    notification.url_title = opts.url_title.as_deref();
 
-    if opts.html {
-        notification.request.html = Some(HTML::Enabled);
-        if opts.monospace {
-            notification.request.monospace = Some(Monospace::Enabled);
-        }
-    }
+    notification.html = opts.html.then(|| HTML::HTML);
+    notification.monospace = opts.monospace.then(|| Monospace::Monospace);
 
-    // send request with file as attachment
-    let attachment;
-    if let Some(p) = &opts.file {
-        attachment = Attachment::from_path(p).await?;
-        notification.attachment = Some(&attachment);
-    }
+    let attachment = if let Some(ref p) = opts.file {
+        Some(Attachment::from_path(p).await?)
+    } else {
+        None
+    };
+    notification.attachment = attachment.as_ref();
 
     // send request
     let res = notification.send().await?;

@@ -21,9 +21,26 @@ pub use attachment::{Attachment, AttachmentError};
 
 mod attachment;
 
-/// Pushover API request <https://pushover.net/api#messages>
+/// Notification error
+#[derive(Error, Debug)]
+pub enum NotificationError {
+    /// Error from [`reqwest`] crate
+    #[error("reqwest error: {0}")]
+    Reqwest(#[from] reqwest::Error),
+    /// Error from [`serde_json`] crate
+    #[error("deserialization error: {0}")]
+    Deserialize(#[from] serde_json::Error),
+    /// Wrapped [`crate::AttachmentError`]
+    #[error("attachment error: {0}")]
+    Attachment(#[from] AttachmentError),
+    /// HTML and monospace are mutually exclusive <https://pushover.net/api#html>
+    #[error("html and monospace are mutually exclusive")]
+    HTMLMonospace,
+}
+
+/// Pushover API parameters <https://pushover.net/api#messages> and attachment
 #[derive(Default, Debug)]
-pub struct Request<'a> {
+pub struct Notification<'a> {
     token: &'a str,
     user: &'a str,
     message: &'a str,
@@ -51,35 +68,37 @@ pub struct Request<'a> {
     /// Users can choose from a number of different default sounds
     /// to play when receiving notifications <https://pushover.net/api#sounds>
     pub sound: Option<Sound>,
+    /// Attachment. Image in most cases
+    pub attachment: Option<&'a Attachment<'a>>,
 }
 
 /// To enable HTML formatting <https://pushover.net/api#html>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum HTML {
-    /// Plain text
+    /// Plain text (default)
     #[strum(serialize = "0")]
-    None,
+    Plain,
     /// HTML
     #[strum(serialize = "1")]
-    Enabled,
+    HTML,
 }
 
 /// To enable monospace messages <https://pushover.net/api#html>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Monospace {
-    /// Normal
+    /// Normal (default)
     #[strum(serialize = "0")]
-    None,
+    Normal,
     /// Monospace
     #[strum(serialize = "1")]
-    Enabled,
+    Monospace,
 }
 
 /// Messages may be sent with a different priority
 /// that affects how the message is presented to the user <https://pushover.net/api#priority>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Priority {
-    /// Normal
+    /// Normal (default)
     #[strum(serialize = "0")]
     Normal,
     /// Lowest
@@ -149,29 +168,6 @@ pub enum Sound {
     None,
 }
 
-/// Notification error
-#[derive(Error, Debug)]
-pub enum NotificationError {
-    /// Error from [`reqwest`] crate
-    #[error("reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
-    /// Error from [`serde_json`] crate
-    #[error("deserialization error: {0}")]
-    Deserialize(#[from] serde_json::Error),
-    /// Wrapped [`crate::AttachmentError`]
-    #[error("attachment error: {0}")]
-    Attachment(#[from] AttachmentError),
-}
-
-/// Request wrapped with attachment
-#[derive(Default, Debug)]
-pub struct Notification<'a> {
-    /// Actual request sent to Pushover API
-    pub request: Request<'a>,
-    /// Attachment
-    pub attachment: Option<&'a Attachment<'a>>,
-}
-
 #[cfg(test)]
 fn server_url() -> String {
     mockito::server_url()
@@ -182,7 +178,13 @@ fn server_url() -> String {
     "https://api.pushover.net".to_string()
 }
 
-/// Sanitize message in [`Request`]
+/// Sanitize message in [`Notification`]
+///
+/// ```rust
+/// # use pushover::sanitize_message;
+/// let m = sanitize_message(r#"<b>Rust</b>"#);
+/// assert_eq!(r#"<b>Rust</b>"#, m);
+/// ```
 pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
     let tags = hashset!["b", "i", "u", "font", "a"];
     let tag_attrs = hashmap![
@@ -197,36 +199,47 @@ pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
         .to_string()
 }
 
+fn text_part<T: ToString>(f: multipart::Form, n: &'static str, v: Option<&T>) -> multipart::Form {
+    if let Some(v) = v {
+        f.text(n, v.to_string())
+    } else {
+        f
+    }
+}
+
 impl<'a> Notification<'a> {
     /// Creates a [`Notification`]
     pub fn new(token: &'a str, user: &'a str, message: &'a str) -> Self {
         Self {
-            request: Request {
-                token,
-                user,
-                message,
-                ..Default::default()
-            },
-            attachment: None,
+            token,
+            user,
+            message,
+            ..Default::default()
         }
     }
 
-    /// Send [`Request`] to Pushover API
+    /// Send [`Notification`] to Pushover API
     pub async fn send(&'a mut self) -> Result<Response, NotificationError> {
-        let form = multipart::Form::new()
-            .text("token", self.request.token.to_string())
-            .text("user", self.request.user.to_string())
-            .text("message", sanitize_message(&self.request.message));
+        if let Some(HTML::HTML) = self.html {
+            if let Some(Monospace::Monospace) = self.monospace {
+                return Err(NotificationError::HTMLMonospace);
+            }
+        }
 
-        let form = Self::append_part(form, "device", self.request.device.as_ref());
-        let form = Self::append_part(form, "title", self.request.title.as_ref());
-        let form = Self::append_part(form, "html", self.request.html.as_ref());
-        let form = Self::append_part(form, "monospace", self.request.monospace.as_ref());
-        let form = Self::append_part(form, "timestamp", self.request.timestamp.as_ref());
-        let form = Self::append_part(form, "priority", self.request.priority.as_ref());
-        let form = Self::append_part(form, "url", self.request.url.as_ref());
-        let form = Self::append_part(form, "url_title", self.request.url_title.as_ref());
-        let form = Self::append_part(form, "sound", self.request.sound.as_ref());
+        let form = multipart::Form::new()
+            .text("token", self.token.to_string())
+            .text("user", self.user.to_string())
+            .text("message", sanitize_message(&self.message));
+
+        let form = text_part(form, "device", self.device.as_ref());
+        let form = text_part(form, "title", self.title.as_ref());
+        let form = text_part(form, "html", self.html.as_ref());
+        let form = text_part(form, "monospace", self.monospace.as_ref());
+        let form = text_part(form, "timestamp", self.timestamp.as_ref());
+        let form = text_part(form, "priority", self.priority.as_ref());
+        let form = text_part(form, "url", self.url.as_ref());
+        let form = text_part(form, "url_title", self.url_title.as_ref());
+        let form = text_part(form, "sound", self.sound.as_ref());
 
         let form = if let Some(a) = self.attachment {
             let part = multipart::Part::bytes(a.content.clone())
@@ -249,18 +262,6 @@ impl<'a> Notification<'a> {
         match serde_json::from_str(&body) {
             Ok(r) => Ok(r),
             Err(e) => Err(NotificationError::Deserialize(e)),
-        }
-    }
-
-    fn append_part<T: ToString>(
-        form: multipart::Form,
-        name: &'static str,
-        value: Option<&T>,
-    ) -> multipart::Form {
-        if let Some(v) = value {
-            form.text(name, v.to_string())
-        } else {
-            form
         }
     }
 }
@@ -317,7 +318,7 @@ mod tests {
             .create();
 
         let mut n = build_notification();
-        n.request.device = Some("device".into());
+        n.device = Some("device".into());
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
@@ -336,19 +337,19 @@ mod tests {
 
     #[test]
     fn test_html() -> Result<(), strum::ParseError> {
-        assert_eq!("0", HTML::None.to_string());
-        assert_eq!(HTML::None, HTML::from_str("0")?);
-        assert_eq!("1", HTML::Enabled.to_string());
-        assert_eq!(HTML::Enabled, HTML::from_str("1")?);
+        assert_eq!("0", HTML::Plain.to_string());
+        assert_eq!(HTML::Plain, HTML::from_str("0")?);
+        assert_eq!("1", HTML::HTML.to_string());
+        assert_eq!(HTML::HTML, HTML::from_str("1")?);
         Ok(())
     }
 
     #[test]
     fn test_monospace() -> Result<(), strum::ParseError> {
-        assert_eq!("0", Monospace::None.to_string());
-        assert_eq!(Monospace::None, Monospace::from_str("0")?);
-        assert_eq!("1", Monospace::Enabled.to_string());
-        assert_eq!(Monospace::Enabled, Monospace::from_str("1")?);
+        assert_eq!("0", Monospace::Normal.to_string());
+        assert_eq!(Monospace::Normal, Monospace::from_str("0")?);
+        assert_eq!("1", Monospace::Monospace.to_string());
+        assert_eq!(Monospace::Monospace, Monospace::from_str("1")?);
         Ok(())
     }
 

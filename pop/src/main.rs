@@ -68,8 +68,8 @@ enum AuthorizationState {
     Rejected,
 }
 
-fn check_authorization(expected: &Option<String>, actual: &Option<String>) -> AuthorizationState {
-    if let Some(e) = expected {
+fn check_authorization(expected: &Opts, actual: &Option<String>) -> AuthorizationState {
+    if let Some(ref e) = expected.authorization {
         if let Some(a) = actual {
             if a == e {
                 AuthorizationState::Accepted
@@ -85,87 +85,54 @@ fn check_authorization(expected: &Option<String>, actual: &Option<String>) -> Au
 }
 
 #[derive(Debug)]
-enum Rejection {
+enum PopError {
     Unauthorized,
     BadRequest(String),
-    Parse(String),
 }
 
-impl warp::reject::Reject for Rejection {}
+impl warp::reject::Reject for PopError {}
+
+fn bad_request<T: ToString>(e: T) -> warp::Rejection {
+    warp::reject::custom(PopError::BadRequest(e.to_string()))
+}
 
 async fn send_notification(
     opts: Arc<Opts>,
     actual: Option<String>,
     message: &Message,
 ) -> Result<warp::reply::Json, warp::Rejection> {
-    match check_authorization(&opts.authorization, &actual) {
-        AuthorizationState::Rejected => Err(warp::reject::custom(Rejection::Unauthorized)),
-        AuthorizationState::Public | AuthorizationState::Accepted => {
-            let mut n = Notification::new(&opts.token, &opts.user, &message.message);
+    if let AuthorizationState::Rejected = check_authorization(&opts, &actual) {
+        return Err(warp::reject::custom(PopError::Unauthorized));
+    }
 
-            if let Some(ref d) = message.device {
-                n.request.device = Some(d);
-            }
+    let mut n = Notification::new(&opts.token, &opts.user, &message.message);
+    n.device = message.device.as_deref();
+    n.title = message.title.as_deref();
+    n.html = message.html.as_ref().and_then(|h| HTML::from_str(h).ok());
+    n.timestamp = message.timestamp;
+    n.priority = message
+        .priority
+        .as_ref()
+        .and_then(|p| Priority::from_str(p).ok());
+    n.url = message.url.as_deref();
+    n.url_title = message.url_title.as_deref();
+    n.sound = message.sound.as_ref().and_then(|s| Sound::from_str(s).ok());
 
-            if let Some(ref t) = message.title {
-                n.request.title = Some(t);
-            }
-
-            if let Some(ref h) = message.html {
-                n.request.html = Some(match HTML::from_str(h) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        return Err(warp::reject::custom(Rejection::Parse(e.to_string())));
-                    }
-                });
-            }
-
-            if let Some(ref t) = message.timestamp {
-                n.request.timestamp = Some(*t);
-            }
-
-            if let Some(ref p) = message.priority {
-                n.request.priority = Some(match Priority::from_str(p) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        let e = e.to_string();
-                        return Err(warp::reject::custom(Rejection::Parse(e)));
-                    }
-                })
-            }
-
-            if let Some(ref u) = message.url {
-                n.request.url = Some(u);
-                if let Some(ref t) = message.url_title {
-                    n.request.url_title = Some(t);
-                }
-            }
-
-            if let Some(ref s) = message.sound {
-                n.request.sound = Some(match Sound::from_str(s) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        return Err(warp::reject::custom(Rejection::Parse(e.to_string())));
-                    }
-                });
-            }
-
-            let a;
-            if let Some(ref u) = message.image_url {
-                a = match Attachment::from_url(u).await {
-                    Ok(a) => a,
-                    Err(e) => {
-                        return Err(warp::reject::custom(Rejection::BadRequest(e.to_string())));
-                    }
-                };
-                n.attachment = Some(&a);
-            }
-
-            match n.send().await {
-                Ok(r) => Ok(warp::reply::json(&r)),
-                Err(e) => Err(warp::reject::custom(Rejection::BadRequest(e.to_string()))),
+    let attachment = if let Some(ref u) = message.image_url {
+        match Attachment::from_url(u).await {
+            Ok(a) => Some(a),
+            Err(e) => {
+                return Err(bad_request(e));
             }
         }
+    } else {
+        None
+    };
+    n.attachment = attachment.as_ref();
+
+    match n.send().await {
+        Ok(r) => Ok(warp::reply::json(&r)),
+        Err(e) => Err(bad_request(e)),
     }
 }
 
@@ -227,10 +194,10 @@ async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::reply::Repl
     let status_code;
     let error;
 
-    if let Some(Rejection::Unauthorized) = err.find() {
+    if let Some(PopError::Unauthorized) = err.find() {
         status_code = StatusCode::UNAUTHORIZED;
         error = "unauthorized".into();
-    } else if let Some(Rejection::BadRequest(ref s)) = err.find() {
+    } else if let Some(PopError::BadRequest(ref s)) = err.find() {
         status_code = StatusCode::BAD_REQUEST;
         error = s.into();
     } else {
