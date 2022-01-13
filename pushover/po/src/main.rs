@@ -106,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
     let attachment;
     if let Some(p) = &opts.file {
         attachment = Attachment::from_path(p).await?;
-        notification.attach(&attachment);
+        notification.attachment = Some(&attachment);
     }
 
     // send request

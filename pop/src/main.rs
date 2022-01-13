@@ -158,7 +158,7 @@ async fn send_notification(
                         return Err(warp::reject::custom(Rejection::BadRequest(e.to_string())));
                     }
                 };
-                n.attach(&a);
+                n.attachment = Some(&a);
             }
 
             match n.send().await {

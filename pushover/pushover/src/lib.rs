@@ -27,23 +27,29 @@ pub struct Request<'a> {
     token: &'a str,
     user: &'a str,
     message: &'a str,
-    /// your user's device name to send the message directly to that device, rather than all of the user's devices (multiple devices may be separated by a comma) <https://pushover.net/api#identifiers>
+    /// Your user's device name to send the message directly to that device,
+    /// rather than all of the user's devices (multiple devices may be separated by a comma)
+    /// <https://pushover.net/api#identifiers>
     pub device: Option<&'a str>,
-    /// your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
+    /// Your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
     pub title: Option<&'a str>,
     /// To enable HTML formatting <https://pushover.net/api#html>
     pub html: Option<HTML>,
     /// To enable monospace messages <https://pushover.net/api#html>
     pub monospace: Option<Monospace>,
-    /// Messages are stored on the Pushover servers with a timestamp of when they were initially received through the API <https://pushover.net/api#html>
+    /// Messages are stored on the Pushover servers with a timestamp of
+    /// when they were initially received through the API <https://pushover.net/api#html>
     pub timestamp: Option<u64>,
-    /// Messages may be sent with a different priority that affects how the message is presented to the user <https://pushover.net/api#priority>
+    /// Messages may be sent with a different priority that affects
+    /// how the message is presented to the user <https://pushover.net/api#priority>
     pub priority: Option<Priority>,
-    /// a supplementary URL to show with your message <https://pushover.net/api#urls>
+    /// A supplementary URL to show with your message <https://pushover.net/api#urls>
     pub url: Option<&'a str>,
-    /// a title for your supplementary URL, otherwise just the URL is shown <https://pushover.net/api#urls>
+    /// A title for your supplementary URL,
+    /// otherwise just the URL is shown <https://pushover.net/api#urls>
     pub url_title: Option<&'a str>,
-    /// Users can choose from a number of different default sounds to play when receiving notifications <https://pushover.net/api#sounds>
+    /// Users can choose from a number of different default sounds
+    /// to play when receiving notifications <https://pushover.net/api#sounds>
     pub sound: Option<Sound>,
 }
 
@@ -69,7 +75,8 @@ pub enum Monospace {
     Enabled,
 }
 
-/// Messages may be sent with a different priority that affects how the message is presented to the user <https://pushover.net/api#priority>
+/// Messages may be sent with a different priority
+/// that affects how the message is presented to the user <https://pushover.net/api#priority>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Priority {
     /// Normal
@@ -89,7 +96,8 @@ pub enum Priority {
     Emergency,
 }
 
-/// Users can choose from a number of different default sounds to play when receiving notifications <https://pushover.net/api#sounds>
+/// Users can choose from a number of different default sounds
+/// to play when receiving notifications <https://pushover.net/api#sounds>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum Sound {
@@ -160,7 +168,8 @@ pub enum NotificationError {
 pub struct Notification<'a> {
     /// Actual request sent to Pushover API
     pub request: Request<'a>,
-    attachment: Option<&'a Attachment<'a>>,
+    /// Attachment
+    pub attachment: Option<&'a Attachment<'a>>,
 }
 
 #[cfg(test)]
@@ -173,6 +182,21 @@ fn server_url() -> String {
     "https://api.pushover.net".to_string()
 }
 
+/// Sanitize message in [`Request`]
+pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
+    let tags = hashset!["b", "i", "u", "font", "a"];
+    let tag_attrs = hashmap![
+        "a"=>hashset!["href"],
+        "font"=>hashset!["color"],
+    ];
+    // Builder consumes tags and tag_attrs unless maintainer changes method signatures
+    ammonia::Builder::default()
+        .tags(tags)
+        .tag_attributes(tag_attrs)
+        .clean(message.as_ref())
+        .to_string()
+}
+
 impl<'a> Notification<'a> {
     /// Creates a [`Notification`]
     pub fn new(token: &'a str, user: &'a str, message: &'a str) -> Self {
@@ -183,35 +207,16 @@ impl<'a> Notification<'a> {
                 message,
                 ..Default::default()
             },
-            ..Default::default()
+            attachment: None,
         }
     }
 
-    /// Attach an [`Attachment`]
-    pub fn attach(&mut self, attachment: &'a Attachment) {
-        self.attachment = Some(attachment);
-    }
-
-    /// Sanitize message in [`Request`]
-    pub fn sanitized_message(&'a self) -> String {
-        let tags = hashset!["b", "i", "u", "font", "a"];
-        let tag_attrs = hashmap![
-            "a"=>hashset!["href"],
-            "font"=>hashset!["color"],
-        ];
-        ammonia::Builder::default()
-            .tags(tags)
-            .tag_attributes(tag_attrs)
-            .clean(self.request.message)
-            .to_string()
-    }
-
     /// Send [`Request`] to Pushover API
-    pub async fn send(&'a self) -> Result<Response, NotificationError> {
+    pub async fn send(&'a mut self) -> Result<Response, NotificationError> {
         let form = multipart::Form::new()
             .text("token", self.request.token.to_string())
             .text("user", self.request.user.to_string())
-            .text("message", self.sanitized_message());
+            .text("message", sanitize_message(&self.request.message));
 
         let form = Self::append_part(form, "device", self.request.device.as_ref());
         let form = Self::append_part(form, "title", self.request.title.as_ref());
@@ -278,7 +283,10 @@ mod tests {
     use mockito::mock;
 
     use crate::attachment::Attachment;
-    use crate::{server_url, Monospace, Notification, NotificationError, Priority, Sound, HTML};
+    use crate::{
+        sanitize_message, server_url, Monospace, Notification, NotificationError, Priority, Sound,
+        HTML,
+    };
 
     #[test]
     fn test_new() {
@@ -291,7 +299,9 @@ mod tests {
             .with_status(200)
             .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
             .create();
-        let n = build_notification();
+
+        let mut n = build_notification();
+
         let res = n.send().await?;
         assert_eq!(1, res.status);
         assert_eq!("647d2300-702c-4b38-8b2f-d56326ae460b", res.request);
@@ -417,7 +427,7 @@ mod tests {
 
         let mut n = build_notification();
         let a = Attachment::new("filename", "plain/text", &[]);
-        n.attach(&a);
+        n.attachment = Some(&a);
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
@@ -437,7 +447,6 @@ mod tests {
             .with_body(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
             .create();
 
-        let mut n = build_notification();
         let u = format!("{}/filename.png", server_url());
 
         let a = Attachment::from_url(&u).await?;
@@ -445,7 +454,8 @@ mod tests {
         assert_eq!("image/png", a.mime_type);
         assert!(a.content.len() > 0);
 
-        n.attach(&a);
+        let mut n = build_notification();
+        n.attachment = Some(&a);
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
@@ -455,31 +465,25 @@ mod tests {
 
     #[test]
     fn test_sanitized_message() {
-        let mut n = build_notification();
-
         let s = "<b>bold</b>";
-        n.request.message = s.into();
-        assert_eq!(s, n.sanitized_message());
+        assert_eq!(s, sanitize_message(s));
 
         let s = "<i>italic</i>";
-        n.request.message = s.into();
-        assert_eq!(s, n.sanitized_message());
+        assert_eq!(s, sanitize_message(s));
 
         let s = "<u>underline</u>";
-        n.request.message = s.into();
-        assert_eq!(s, n.sanitized_message());
+        assert_eq!(s, sanitize_message(s));
 
         let s = "<font color=\"#000000\">font</font>";
-        n.request.message = s.into();
-        assert_eq!(s, n.sanitized_message());
+        assert_eq!(s, sanitize_message(s));
 
-        n.request.message = "<a href=\"https://badssl.com/\">link</a>".into();
+        let s = "<a href=\"https://badssl.com/\">link</a>";
         assert_eq!(
             "<a href=\"https://badssl.com/\" rel=\"noopener noreferrer\">link</a>",
-            n.sanitized_message()
+            sanitize_message(s)
         );
 
-        n.request.message = "<script>alert('XSS');</script>".into();
-        assert_eq!("", n.sanitized_message());
+        let s = "<script>alert('XSS');</script>";
+        assert_eq!("", sanitize_message(s));
     }
 }
