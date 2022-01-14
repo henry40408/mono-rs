@@ -14,11 +14,14 @@
 
 use structopt::StructOpt;
 
-use hcc::{CheckResultJSON, Checker};
+use hcc::{CheckedJSON, Checker};
 
 #[derive(Debug, Default, StructOpt)]
 #[structopt(author, about)]
 struct Opts {
+    /// ASCII
+    #[structopt(short, long)]
+    ascii: bool,
     /// Output in JSON format
     #[structopt(short, long)]
     json: bool,
@@ -64,6 +67,7 @@ async fn check_command(
     grace_in_days: i64,
 ) -> anyhow::Result<()> {
     let mut client = Checker::default();
+    client.ascii = opts.ascii;
     client.elapsed = opts.verbose;
     client.grace_in_days = grace_in_days;
 
@@ -71,11 +75,11 @@ async fn check_command(
 
     if opts.json {
         let s = if results.len() > 1 {
-            let json: Vec<CheckResultJSON> = results.iter().map(CheckResultJSON::new).collect();
+            let json: Vec<CheckedJSON> = results.iter().map(CheckedJSON::new).collect();
             serde_json::to_string(&json)?
         } else {
             let result = results.get(0).unwrap();
-            let json = CheckResultJSON::new(result);
+            let json = CheckedJSON::new(result);
             serde_json::to_string(&json)?
         };
         println!("{0}", s);

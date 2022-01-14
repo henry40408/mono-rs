@@ -12,8 +12,8 @@
 
 //! HTTPS Certificate Check
 
-pub use check_result::{CheckResult, CheckResultJSON, CheckState};
+pub use checked::{CertificateState, Checked, CheckedJSON};
 pub use checker::Checker;
 
-mod check_result;
+mod checked;
 mod checker;

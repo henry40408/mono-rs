@@ -11,7 +11,7 @@ use structopt::StructOpt;
 use warp::http::StatusCode;
 use warp::Filter;
 
-use hcc::{CheckResultJSON, Checker};
+use hcc::{CheckedJSON, Checker};
 
 #[derive(Debug, StructOpt)]
 #[structopt(author, about)]
@@ -53,10 +53,10 @@ async fn check_domain_names(
         Err(e) => return Err(warp::reject::custom(Rejection::BadRequest(e.to_string()))),
     };
     if results.len() == 1 {
-        let json = CheckResultJSON::new(results.first().unwrap());
+        let json = CheckedJSON::new(results.first().unwrap());
         Ok(warp::reply::json(&json))
     } else {
-        let json: Vec<CheckResultJSON> = results.iter().map(CheckResultJSON::new).collect();
+        let json: Vec<CheckedJSON> = results.iter().map(CheckedJSON::new).collect();
         Ok(warp::reply::json(&json))
     }
 }

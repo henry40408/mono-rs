@@ -81,7 +81,7 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
         tasks.push(async move {
             let title = format!("HTTP Certificate Check - {}", r.domain_name);
 
-            let state_icon = r.state_icon(true);
+            let state_icon = r.state_icon();
             let sentence = r.sentence();
             let message = format!("{} {}", state_icon, sentence);
 
