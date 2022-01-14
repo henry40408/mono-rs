@@ -13,6 +13,7 @@
 //! Pop is proxy server to Pushover with attachment support
 
 use std::convert::Infallible;
+use std::fmt::Display;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -92,7 +93,7 @@ enum PopError {
 
 impl warp::reject::Reject for PopError {}
 
-fn bad_request<T: ToString>(e: T) -> warp::Rejection {
+fn bad_request<T: Display>(e: T) -> warp::Rejection {
     warp::reject::custom(PopError::BadRequest(e.to_string()))
 }
 

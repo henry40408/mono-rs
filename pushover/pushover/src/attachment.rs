@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -35,7 +36,7 @@ pub struct Attachment<'a> {
 
 impl<'a> Attachment<'a> {
     /// Creates an [`Attachment`]
-    pub fn new<S: ToString>(filename: S, mime_type: &'a str, content: &[u8]) -> Attachment<'a> {
+    pub fn new<S: Display>(filename: S, mime_type: &'a str, content: &[u8]) -> Attachment<'a> {
         Self {
             filename: filename.to_string(),
             mime_type,

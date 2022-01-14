@@ -15,6 +15,7 @@
 use maplit::{hashmap, hashset};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use thiserror::Error;
 
 pub use attachment::{Attachment, AttachmentError};
@@ -199,7 +200,7 @@ pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
         .to_string()
 }
 
-fn text_part<T: ToString>(f: multipart::Form, n: &'static str, v: Option<T>) -> multipart::Form {
+fn text_part<T: Display>(f: multipart::Form, n: &'static str, v: Option<T>) -> multipart::Form {
     if let Some(v) = v {
         f.text(n, v.to_string())
     } else {
