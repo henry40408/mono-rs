@@ -1,6 +1,6 @@
 [package]
 name = "po"
-version = "0.1.2"
+version = "0.1.1"
 edition = "2021"
 description = "Po is a command line application to send notifications to Pushover"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
