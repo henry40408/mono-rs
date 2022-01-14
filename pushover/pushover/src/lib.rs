@@ -215,7 +215,10 @@ impl<'a> Notification<'a> {
     /// # use pushover::Notification;
     /// Notification::new("token", "user", "message");
     /// ```
-    pub fn new<T: Into<Cow<'a, str>>>(token: T, user: T, message: T) -> Self {
+    pub fn new<T>(token: T, user: T, message: T) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
         Self {
             token: token.into(),
             user: user.into(),
@@ -251,7 +254,7 @@ impl<'a> Notification<'a> {
             // TODO can we avoid clone of content Vec?
             let part = multipart::Part::bytes(a.content.clone())
                 .file_name(a.filename.to_string())
-                .mime_str(a.mime_type)?;
+                .mime_str(&a.mime_type)?;
             form.part("attachment", part)
         } else {
             form

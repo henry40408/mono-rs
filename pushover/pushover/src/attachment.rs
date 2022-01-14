@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -27,20 +27,23 @@ pub enum AttachmentError {
 #[derive(Debug)]
 pub struct Attachment<'a> {
     /// Required. Filename
-    pub(crate) filename: String,
+    pub(crate) filename: Cow<'a, str>,
     /// Required. MIME type, inferred when attached from URL
-    pub(crate) mime_type: &'a str,
+    pub(crate) mime_type: Cow<'a, str>,
     /// Required. Attachment content
     pub(crate) content: Vec<u8>,
 }
 
 impl<'a> Attachment<'a> {
     /// Creates an [`Attachment`]
-    pub fn new<S: Display>(filename: S, mime_type: &'a str, content: &[u8]) -> Attachment<'a> {
+    pub fn new<T>(filename: T, mime_type: T, content: &[u8]) -> Attachment<'a>
+    where
+        T: 'a + Into<Cow<'a, str>>,
+    {
         Self {
-            filename: filename.to_string(),
-            mime_type,
-            content: content.into(),
+            filename: filename.into(),
+            mime_type: mime_type.into(),
+            content: content.to_vec(),
         }
     }
 
@@ -54,7 +57,11 @@ impl<'a> Attachment<'a> {
             .file_name()
             .map_or("filename", |t| t.to_str().map_or("filename", |t| t));
         let mime_type = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
-        Ok(Self::new(filename, mime_type.mime_type(), &buffer))
+        Ok(Self::new(
+            filename.to_owned(),
+            mime_type.mime_type().to_owned(),
+            &buffer,
+        ))
     }
 
     /// Creates an [`Attachment`] with URL string
@@ -70,7 +77,11 @@ impl<'a> Attachment<'a> {
         };
         let buffer = res.bytes().await?.to_vec();
         let mime_type = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
-        Ok(Self::new(filename, mime_type.mime_type(), &buffer))
+        Ok(Self::new(
+            filename.to_owned(),
+            mime_type.mime_type().to_owned(),
+            &buffer,
+        ))
     }
 }
 
