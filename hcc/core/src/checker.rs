@@ -107,18 +107,17 @@ impl Checker {
 
         let duration = not_after - self.checked_at;
         let days = duration.num_days();
+        let not_after = not_after.timestamp();
         let state = if days > self.grace_in_days {
-            CertificateState::Ok
+            CertificateState::Ok { days, not_after }
         } else {
-            CertificateState::Warning
+            CertificateState::Warning { days, not_after }
         };
         Ok(Checked {
             state,
             ascii: self.ascii,
             checked_at: self.checked_at.timestamp(),
-            days: duration.num_days(),
             domain_name: domain_name.to_owned(),
-            not_after: not_after.timestamp(),
             elapsed: if self.elapsed {
                 Some(elapsed.as_millis())
             } else {
@@ -172,20 +171,20 @@ impl Checker {
 
 #[cfg(test)]
 mod test {
-    use chrono::{TimeZone, Utc};
-
     use crate::checked::CertificateState;
     use crate::checker::Checker;
 
     #[tokio::test]
     async fn test_good_certificate() {
-        let now = Utc.timestamp(0, 0);
         let client = Checker::default();
 
         let result = client.check_one("sha512.badssl.com").await.unwrap();
-        assert!(matches!(result.state, CertificateState::Ok));
+        assert!(matches!(result.state, CertificateState::Ok { .. }));
         assert!(result.checked_at > 0);
-        assert!(now < Utc.timestamp(result.not_after, 0));
+        if let CertificateState::Ok { days, not_after } = result.state {
+            assert!(days > 0);
+            assert!(not_after > 0);
+        }
 
         let _result = client
             .check_one("sha512.badssl.com".to_string())
@@ -199,7 +198,6 @@ mod test {
         let result = client.check_one("expired.badssl.com").await.unwrap();
         assert!(matches!(result.state, CertificateState::Expired));
         assert!(result.checked_at > 0);
-        assert_eq!(0, result.not_after);
     }
 
     #[tokio::test]
@@ -211,7 +209,7 @@ mod test {
         assert_eq!(2, results.len());
 
         let result = results.get(0).unwrap();
-        assert!(matches!(result.state, CertificateState::Ok));
+        assert!(matches!(result.state, CertificateState::Ok { .. }));
 
         let result = results.get(1).unwrap();
         assert!(matches!(result.state, CertificateState::Expired));
@@ -225,12 +223,14 @@ mod test {
 
         let client = Checker::default();
         let result = client.check_one(domain_name).await.unwrap();
-        assert!(matches!(result.state, CertificateState::Ok));
+        assert!(matches!(result.state, CertificateState::Ok { .. }));
 
-        let mut client = Checker::default();
-        client.grace_in_days = result.days + 1;
+        if let CertificateState::Ok { days, not_after: _ } = result.state {
+            let mut client = Checker::default();
+            client.grace_in_days = days + 1;
 
-        let result = client.check_one(domain_name).await.unwrap();
-        assert!(matches!(result.state, CertificateState::Warning));
+            let result = client.check_one(domain_name).await.unwrap();
+            assert!(matches!(result.state, CertificateState::Warning { .. }));
+        }
     }
 }
