@@ -199,7 +199,7 @@ pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
         .to_string()
 }
 
-fn text_part<T: ToString>(f: multipart::Form, n: &'static str, v: Option<&T>) -> multipart::Form {
+fn text_part<T: ToString>(f: multipart::Form, n: &'static str, v: Option<T>) -> multipart::Form {
     if let Some(v) = v {
         f.text(n, v.to_string())
     } else {
