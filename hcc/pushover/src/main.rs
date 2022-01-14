@@ -23,7 +23,7 @@ use env_logger::Env;
 use log::info;
 use structopt::StructOpt;
 
-use hcc::CheckClient;
+use hcc::Checker;
 use pushover::Notification;
 
 #[derive(Debug, StructOpt)]
@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Result<()> {
-    let check_client = CheckClient::default();
+    let check_client = Checker::default();
     let results = check_client.check_many(domain_names).await?;
 
     let mut tasks = vec![];

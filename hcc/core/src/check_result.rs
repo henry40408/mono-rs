@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -45,7 +46,7 @@ pub struct CheckResult<'a> {
     /// Remaining days to the expiration date
     pub days: i64,
     /// Domain name that got checked
-    pub domain_name: &'a str,
+    pub domain_name: Cow<'a, str>,
     /// Exact expiration time in seconds since Unix epoch
     pub not_after: i64,
     /// Elapsed time in milliseconds
@@ -60,11 +61,14 @@ impl<'a> CheckResult<'a> {
     /// use chrono::Utc;
     /// CheckResult::expired("expired.badssl.com", &Utc::now());
     /// ```
-    pub fn expired(domain_name: &'a str, checked_at: &'a DateTime<Utc>) -> Self {
+    pub fn expired<T>(domain_name: T, checked_at: &'a DateTime<Utc>) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+    {
         CheckResult {
             state: CheckState::Expired,
             checked_at: checked_at.timestamp(),
-            domain_name,
+            domain_name: domain_name.into(),
             ..Default::default()
         }
     }
@@ -228,7 +232,7 @@ mod test {
         CheckResult {
             checked_at: now.timestamp(),
             days,
-            domain_name: &"example.com",
+            domain_name: "example.com".into(),
             not_after: expired_at.timestamp(),
             ..Default::default()
         }

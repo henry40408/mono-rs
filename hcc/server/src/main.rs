@@ -11,7 +11,7 @@ use structopt::StructOpt;
 use warp::http::StatusCode;
 use warp::Filter;
 
-use hcc::{CheckClient, CheckResultJSON};
+use hcc::{CheckResultJSON, Checker};
 
 #[derive(Debug, StructOpt)]
 #[structopt(author, about)]
@@ -27,7 +27,7 @@ struct ErrorJSON {
 }
 
 struct AppState {
-    client: CheckClient,
+    client: Checker,
 }
 
 fn with_state(
@@ -78,12 +78,12 @@ mod tests {
 
     use warp::http::Method;
 
-    use hcc::CheckClient;
+    use hcc::Checker;
 
     use crate::{domain_names_filter, AppState};
 
     fn build_state() -> Arc<AppState> {
-        let mut client = CheckClient::default();
+        let mut client = Checker::default();
         client.elapsed = true;
         Arc::new(AppState { client })
     }
@@ -127,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
 
     let opts: Opts = Opts::from_args();
 
-    let mut client = CheckClient::default();
+    let mut client = Checker::default();
     client.elapsed = true;
 
     let state = Arc::new(AppState { client });

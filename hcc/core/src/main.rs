@@ -14,7 +14,7 @@
 
 use structopt::StructOpt;
 
-use hcc::{CheckClient, CheckResultJSON};
+use hcc::{CheckResultJSON, Checker};
 
 #[derive(Debug, Default, StructOpt)]
 #[structopt(author, about)]
@@ -63,7 +63,7 @@ async fn check_command(
     domain_names: &[&str],
     grace_in_days: i64,
 ) -> anyhow::Result<()> {
-    let mut client = CheckClient::default();
+    let mut client = Checker::default();
     client.elapsed = opts.verbose;
     client.grace_in_days = grace_in_days;
 
