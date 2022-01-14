@@ -23,7 +23,7 @@ use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use warp::http::StatusCode;
-use warp::Filter;
+use warp::{reject, reply, Filter, Rejection, Reply};
 
 use pushover::{Attachment, Notification, Priority, Sound, HTML};
 
@@ -64,24 +64,23 @@ struct ErrorJson {
 }
 
 enum AuthorizationState {
-    Public,
-    Accepted,
-    Rejected,
+    Denied,
+    Allowed,
 }
 
-fn check_authorization(expected: &Opts, actual: &Option<String>) -> AuthorizationState {
-    if let Some(ref e) = expected.authorization {
+fn check_authorization(opts: &Opts, actual: &Option<String>) -> AuthorizationState {
+    if let Some(ref e) = opts.authorization {
         if let Some(a) = actual {
             if a == e {
-                AuthorizationState::Accepted
+                AuthorizationState::Allowed
             } else {
-                AuthorizationState::Rejected
+                AuthorizationState::Denied
             }
         } else {
-            AuthorizationState::Rejected
+            AuthorizationState::Denied
         }
     } else {
-        AuthorizationState::Public
+        AuthorizationState::Allowed
     }
 }
 
@@ -91,19 +90,24 @@ enum PopError {
     BadRequest(String),
 }
 
-impl warp::reject::Reject for PopError {}
-
-fn bad_request<T: Display>(e: T) -> warp::Rejection {
-    warp::reject::custom(PopError::BadRequest(e.to_string()))
+impl PopError {
+    fn unauthorized() -> Rejection {
+        reject::custom(Self::Unauthorized)
+    }
+    fn bad_request<T: Display>(e: T) -> Rejection {
+        reject::custom(Self::BadRequest(e.to_string()))
+    }
 }
+
+impl reject::Reject for PopError {}
 
 async fn send_notification(
     opts: Arc<Opts>,
     actual: Option<String>,
     message: &Message,
-) -> Result<warp::reply::Json, warp::Rejection> {
-    if let AuthorizationState::Rejected = check_authorization(&opts, &actual) {
-        return Err(warp::reject::custom(PopError::Unauthorized));
+) -> Result<reply::Json, Rejection> {
+    if let AuthorizationState::Denied = check_authorization(&opts, &actual) {
+        return Err(PopError::unauthorized());
     }
 
     let mut n = Notification::new(&opts.token, &opts.user, &message.message);
@@ -122,9 +126,7 @@ async fn send_notification(
     let attachment = if let Some(ref u) = message.image_url {
         match Attachment::from_url(u).await {
             Ok(a) => Some(a),
-            Err(e) => {
-                return Err(bad_request(e));
-            }
+            Err(e) => return Err(PopError::bad_request(e)),
         }
     } else {
         None
@@ -132,8 +134,8 @@ async fn send_notification(
     n.attachment = attachment.as_ref();
 
     match n.send().await {
-        Ok(r) => Ok(warp::reply::json(&r)),
-        Err(e) => Err(bad_request(e)),
+        Ok(ref r) => Ok(reply::json(r)),
+        Err(e) => Err(PopError::bad_request(e)),
     }
 }
 
@@ -141,12 +143,32 @@ fn with_opts(opts: Arc<Opts>) -> impl Filter<Extract = (Arc<Opts>,), Error = Inf
     warp::any().map(move || opts.clone())
 }
 
+async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+    let error;
+    let status_code;
+
+    if let Some(PopError::Unauthorized) = err.find::<PopError>() {
+        error = "unauthorized".into();
+        status_code = StatusCode::UNAUTHORIZED;
+    } else if let Some(PopError::BadRequest(ref s)) = err.find::<PopError>() {
+        error = s.into();
+        status_code = StatusCode::BAD_REQUEST;
+    } else {
+        eprintln!("{:?}", err);
+        error = "internal server error".into();
+        status_code = StatusCode::INTERNAL_SERVER_ERROR;
+    }
+    Ok(reply::with_status(
+        reply::json(&ErrorJson { error }),
+        status_code,
+    ))
+}
+
 fn one_messages_filter(
     opts: Arc<Opts>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = impl Reply, Error = Infallible> + Clone {
     warp::post()
-        .and(warp::path("1"))
-        .and(warp::path("messages"))
+        .and(warp::path!("1" / "messages"))
         .and(with_opts(opts))
         .and(warp::body::json())
         .and(warp::header::optional::<String>("authorization"))
@@ -155,6 +177,7 @@ fn one_messages_filter(
                 send_notification(opts.clone(), actual, &message).await
             },
         )
+        .recover(handle_rejection)
 }
 
 #[cfg(test)]
@@ -169,7 +192,7 @@ mod tests {
     use super::Opts;
 
     #[tokio::test]
-    async fn test_one_messages_filter() {
+    async fn test_public() {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
             .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
@@ -189,28 +212,36 @@ mod tests {
             .await;
         assert_eq!(200, res.status());
     }
-}
 
-async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::reply::Reply, Infallible> {
-    let status_code;
-    let error;
+    #[tokio::test]
+    async fn test_authorized() {
+        let secret = "secret";
 
-    if let Some(PopError::Unauthorized) = err.find() {
-        status_code = StatusCode::UNAUTHORIZED;
-        error = "unauthorized".into();
-    } else if let Some(PopError::BadRequest(ref s)) = err.find() {
-        status_code = StatusCode::BAD_REQUEST;
-        error = s.into();
-    } else {
-        eprintln!("{:?}", err);
-        status_code = StatusCode::INTERNAL_SERVER_ERROR;
-        error = "unknown error".into();
+        let opts = Arc::new(Opts {
+            token: "".into(),
+            user: "".into(),
+            authorization: Some(secret.into()),
+            bind: "".into(),
+        });
+        let filter = one_messages_filter(opts);
+
+        let res = warp::test::request()
+            .method(Method::POST.as_str())
+            .path("/1/messages")
+            .body(r#"{"message":"test"}"#)
+            .reply(&filter)
+            .await;
+        assert_eq!(401, res.status());
+
+        let res = warp::test::request()
+            .method(Method::POST.as_str())
+            .path("/1/messages")
+            .header("authorization", secret)
+            .body(r#"{"message":"test"}"#)
+            .reply(&filter)
+            .await;
+        assert_eq!(200, res.status());
     }
-
-    Ok(warp::reply::with_status(
-        warp::reply::json(&ErrorJson { error }),
-        status_code,
-    ))
 }
 
 #[tokio::main]
@@ -224,7 +255,7 @@ async fn main() -> anyhow::Result<()> {
 
     let opts = Arc::new(opts);
     let filter = one_messages_filter(opts.clone());
-    let app = filter.recover(handle_rejection).with(warp::log("pop"));
+    let app = filter.with(warp::log("pop"));
 
     let bind: SocketAddr = opts.bind.parse()?;
     info!("running on {}", opts.bind);
