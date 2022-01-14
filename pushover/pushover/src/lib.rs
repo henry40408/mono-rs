@@ -15,6 +15,7 @@
 use maplit::{hashmap, hashset};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt::Display;
 use thiserror::Error;
 
@@ -42,9 +43,9 @@ pub enum NotificationError {
 /// Pushover API parameters <https://pushover.net/api#messages> and attachment
 #[derive(Default, Debug)]
 pub struct Notification<'a> {
-    token: &'a str,
-    user: &'a str,
-    message: &'a str,
+    token: Cow<'a, str>,
+    user: Cow<'a, str>,
+    message: Cow<'a, str>,
     /// Your user's device name to send the message directly to that device,
     /// rather than all of the user's devices (multiple devices may be separated by a comma)
     /// <https://pushover.net/api#identifiers>
@@ -210,17 +211,21 @@ fn text_part<T: Display>(f: multipart::Form, n: &'static str, v: Option<T>) -> m
 
 impl<'a> Notification<'a> {
     /// Creates a [`Notification`]
-    pub fn new(token: &'a str, user: &'a str, message: &'a str) -> Self {
+    /// ```rust
+    /// # use pushover::Notification;
+    /// Notification::new("token", "user", "message");
+    /// ```
+    pub fn new<T: Into<Cow<'a, str>>>(token: T, user: T, message: T) -> Self {
         Self {
-            token,
-            user,
-            message,
+            token: token.into(),
+            user: user.into(),
+            message: message.into(),
             ..Default::default()
         }
     }
 
     /// Send [`Notification`] to Pushover API
-    pub async fn send(&'a mut self) -> Result<Response, NotificationError> {
+    pub async fn send(&self) -> Result<Response, NotificationError> {
         if let Some(HTML::HTML) = self.html {
             if let Some(Monospace::Monospace) = self.monospace {
                 return Err(NotificationError::HTMLMonospace);
@@ -243,6 +248,7 @@ impl<'a> Notification<'a> {
         let form = text_part(form, "sound", self.sound.as_ref());
 
         let form = if let Some(a) = self.attachment {
+            // TODO can we avoid clone of content Vec?
             let part = multipart::Part::bytes(a.content.clone())
                 .file_name(a.filename.to_string())
                 .mime_str(a.mime_type)?;
@@ -299,14 +305,14 @@ mod tests {
     async fn test_send() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
-            .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
+            .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
             .create();
 
-        let mut n = build_notification();
+        let n = build_notification();
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
-        assert_eq!("647d2300-702c-4b38-8b2f-d56326ae460b", res.request);
+        assert_eq!("00000000-0000-0000-0000-000000000000", res.request);
         assert!(res.errors.is_none());
         Ok(())
     }
@@ -315,7 +321,7 @@ mod tests {
     async fn test_device() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
-            .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
+            .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
             .create();
 
         let mut n = build_notification();
@@ -323,7 +329,7 @@ mod tests {
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
-        assert_eq!("647d2300-702c-4b38-8b2f-d56326ae460b", res.request);
+        assert_eq!("00000000-0000-0000-0000-000000000000", res.request);
         assert!(res.errors.is_none());
 
         Ok(())
@@ -424,7 +430,7 @@ mod tests {
     async fn test_attach_and_send() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
-            .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
+            .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
             .create();
 
         let mut n = build_notification();
@@ -433,20 +439,22 @@ mod tests {
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
-        assert_eq!("647d2300-702c-4b38-8b2f-d56326ae460b", res.request);
+        assert_eq!("00000000-0000-0000-0000-000000000000", res.request);
         Ok(())
     }
 
     #[tokio::test]
     async fn test_attach_url_and_send() -> Result<(), NotificationError> {
+        let body = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
-            .with_body(r#"{"status":1,"request":"647d2300-702c-4b38-8b2f-d56326ae460b"}"#)
+            .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
             .create();
 
         let _n = mock("GET", "/filename.png")
             .with_status(200)
-            .with_body(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+            .with_body(body)
             .create();
 
         let u = format!("{}/filename.png", server_url());
@@ -454,14 +462,14 @@ mod tests {
         let a = Attachment::from_url(&u).await?;
         assert_eq!("filename.png", a.filename);
         assert_eq!("image/png", a.mime_type);
-        assert!(a.content.len() > 0);
+        assert_eq!(body.len(), a.content.len());
 
         let mut n = build_notification();
         n.attachment = Some(&a);
 
         let res = n.send().await?;
         assert_eq!(1, res.status);
-        assert_eq!("647d2300-702c-4b38-8b2f-d56326ae460b", res.request);
+        assert_eq!("00000000-0000-0000-0000-000000000000", res.request);
         Ok(())
     }
 

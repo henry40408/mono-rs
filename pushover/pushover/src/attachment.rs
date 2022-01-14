@@ -62,7 +62,7 @@ impl<'a> Attachment<'a> {
         let parsed = Url::parse(url.as_ref())?;
         let filename = parsed
             .path_segments()
-            .map_or("filename", |t| t.last().map_or("filename", |t1| t1));
+            .map_or("filename", |s| s.last().map_or("filename", |s| s));
         let res = reqwest::get(parsed.as_str()).await?;
         let res = match res.error_for_status() {
             Ok(r) => r,
@@ -77,6 +77,7 @@ impl<'a> Attachment<'a> {
 #[cfg(test)]
 mod tests {
     use mockito::mock;
+    use url::Url;
 
     use crate::server_url;
     use crate::{Attachment, AttachmentError};
@@ -84,6 +85,28 @@ mod tests {
     #[test]
     fn test_attachment_new() {
         Attachment::new("filename", "plain/text", &[]);
+    }
+
+    #[tokio::test]
+    async fn test_from_url() -> Result<(), AttachmentError> {
+        let body = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let _m = mock("GET", "/image.png")
+            .with_status(200)
+            .with_body(body)
+            .create();
+
+        let url = format!("{}/image.png", &mockito::server_url());
+
+        // accepts &str
+        let attachment = Attachment::from_url(&url).await?;
+        assert_eq!(body.len(), attachment.content.len());
+
+        // accepts Url
+        let url = Url::parse(&url)?;
+        let attachment = Attachment::from_url(&url).await?;
+        assert_eq!(body.len(), attachment.content.len());
+
+        Ok(())
     }
 
     #[tokio::test]
