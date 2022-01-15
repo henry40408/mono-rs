@@ -37,7 +37,7 @@ use ttl_cache::TtlCache;
 
 const HTTP_TIMEOUT: u64 = 30;
 
-/// Error from [`Cdu`]
+/// Recoverable errors from [`Cdu`]
 #[derive(Clone, Copy, Debug, Error)]
 pub enum RecoverableError {
     /// Recoverable: Failed to determine IPv4 address
@@ -62,11 +62,12 @@ pub struct Cdu<'a> {
     cache: Arc<Mutex<TtlCache<(CacheType, String), String>>>,
     /// Cache latest IP address for how many seconds
     pub cache_seconds: Option<u64>,
+    // [`tokio_retry::RetryIf`] denies mutable borrowing
     last_ip: RefCell<Option<Ipv4Addr>>,
 }
 
 impl<'a> Cdu<'a> {
-    /// Creates an [`Cdu`]
+    /// Creates a [`Cdu`]
     pub fn new<T, U>(token: T, zone: T, record_names: &'a [U]) -> Self
     where
         T: Into<Cow<'a, str>>,

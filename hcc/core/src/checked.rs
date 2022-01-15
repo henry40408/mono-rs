@@ -51,7 +51,7 @@ impl fmt::Display for CertificateState {
 pub struct Checked<'a> {
     /// State of certificate
     pub state: CertificateState,
-    /// ASCII?
+    /// ASCII only?
     pub ascii: bool,
     /// When is domain name got checked in seconds since Unix epoch
     pub checked_at: i64,
