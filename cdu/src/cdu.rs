@@ -1,10 +1,12 @@
+use derivative::Derivative;
+use std::borrow::Cow;
 use std::cell::RefCell;
-use std::fmt::Formatter;
+use std::fmt::Display;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use cloudflare::endpoints::dns::{
     DnsContent, DnsRecord, ListDnsRecords, ListDnsRecordsParams, UpdateDnsRecord,
     UpdateDnsRecordParams,
@@ -18,54 +20,52 @@ use log::{debug, info};
 use tokio::task::JoinHandle;
 use ttl_cache::TtlCache;
 
-use crate::{Opts, PublicIPError};
-
 const HTTP_TIMEOUT: u64 = 30;
 
-const ZONE: u8 = 1;
-const RECORD: u8 = 2;
-
-/// Cloudflare DNS Update
-pub struct Cdu<'a> {
-    opts: &'a Opts,
-    cache: Arc<Mutex<TtlCache<(u8, String), String>>>,
-    last_ip: RefCell<Option<Ipv4Addr>>,
+#[derive(Eq, PartialEq, Hash)]
+enum CacheType {
+    Zone,
+    Record,
 }
 
-impl<'a> std::fmt::Debug for Cdu<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Cdu {{ opts: {:?} }}", self.opts)
-    }
+/// Cloudflare DNS Update
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct Cdu<'a> {
+    token: Cow<'a, str>,
+    zone: Cow<'a, str>,
+    record_names: Vec<String>,
+    #[derivative(Debug = "ignore")]
+    cache: Arc<Mutex<TtlCache<(CacheType, String), String>>>,
+    /// Cache latest IP address for how many seconds
+    pub cache_seconds: Option<u64>,
+    last_ip: RefCell<Option<Ipv4Addr>>,
 }
 
 impl<'a> Cdu<'a> {
     /// Creates an [`Cdu`]
-    pub fn new(opts: &'a Opts) -> Self {
-        let capacity = opts.record_name_list().len();
+    pub fn new<T, U>(token: T, zone: T, record_names: &'a [U]) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        U: Display,
+    {
+        let capacity = record_names.len();
         Self {
-            opts,
+            token: token.into(),
+            zone: zone.into(),
+            record_names: record_names
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>(),
             // zone identifier and record identifiers
             cache: Arc::new(Mutex::new(TtlCache::new(capacity + 1))),
+            cache_seconds: None,
             last_ip: RefCell::new(None),
         }
     }
 
     pub(crate) fn cache_ttl(&self) -> Option<Duration> {
-        if self.opts.cache_seconds > 0 {
-            Some(Duration::from_secs(self.opts.cache_seconds))
-        } else {
-            None
-        }
-    }
-
-    /// Cron syntax from argument parser
-    pub fn cron(&self) -> &str {
-        &self.opts.cron
-    }
-
-    /// Is daemon mode enabled?
-    pub fn is_daemon(&self) -> bool {
-        self.opts.daemon
+        self.cache_seconds.map(Duration::from_secs)
     }
 
     async fn get_zone_identifier(&self, client: Arc<Client>) -> anyhow::Result<(Duration, String)> {
@@ -73,15 +73,15 @@ impl<'a> Cdu<'a> {
             .cache
             .lock()
             .unwrap()
-            .get(&(ZONE, self.opts.zone.clone()))
+            .get(&(CacheType::Zone, self.zone.to_string()))
         {
-            debug!("zone found in cache: {} ({})", &self.opts.zone, &id);
+            debug!("zone found in cache: {} ({})", &self.zone, &id);
             return Ok((Duration::from_millis(0), id.clone()));
         }
 
         let params = ListZones {
             params: ListZonesParams {
-                name: Some(self.opts.zone.clone()),
+                name: Some(self.zone.to_string()),
                 ..Default::default()
             },
         };
@@ -93,22 +93,19 @@ impl<'a> Cdu<'a> {
 
         let id = match res.result.first() {
             Some(zone) => zone.id.to_string(),
-            None => bail!("zone not found: {}", self.opts.zone),
+            None => bail!("zone not found: {}", self.zone),
         };
         if let Some(ttl) = self.cache_ttl() {
             let mut cache = self.cache.lock().unwrap();
-            cache.insert((ZONE, self.opts.zone.clone()), id.clone(), ttl);
+            cache.insert((CacheType::Zone, self.zone.to_string()), id.clone(), ttl);
         }
-        debug!(
-            "zone fetched from Cloudflare: {} ({})",
-            &self.opts.zone, &id
-        );
+        debug!("zone fetched from Cloudflare: {} ({})", &self.zone, &id);
         Ok((elapsed, id))
     }
 
     fn build_client(&self) -> anyhow::Result<Client> {
         let credentials = Credentials::UserAuthToken {
-            token: self.opts.token.clone(),
+            token: self.token.to_string(),
         };
         let config = HttpApiClientConfig {
             http_timeout: Duration::from_secs(HTTP_TIMEOUT),
@@ -119,7 +116,9 @@ impl<'a> Cdu<'a> {
 
     /// Perform DNS record update on Cloudflare
     pub async fn run(&self) -> anyhow::Result<()> {
-        let current_ip = public_ip::addr_v4().await.ok_or(PublicIPError)?;
+        let current_ip = public_ip::addr_v4()
+            .await
+            .context("failed to determine IPv4 address")?;
         debug!("public IPv4 address: {}", &current_ip);
 
         let last_ip = *self.last_ip.borrow();
@@ -141,13 +140,18 @@ impl<'a> Cdu<'a> {
         let (elapsed1, zone_id) = self.get_zone_identifier(client.clone()).await?;
 
         let mut tasks = vec![];
-        for record_name in self.opts.record_name_list() {
+        for record_name in &self.record_names {
             let client = client.clone();
+            let record_name = record_name.clone();
             let zone_id = zone_id.clone();
             let cache = self.cache.clone();
             let cache_ttl = self.cache_ttl();
             tasks.push(tokio::spawn(async move {
-                if let Some(id) = cache.lock().unwrap().get(&(RECORD, record_name.clone())) {
+                if let Some(id) = cache
+                    .lock()
+                    .unwrap()
+                    .get(&(CacheType::Record, record_name.clone()))
+                {
                     debug!("record found in cache: {} ({})", &record_name, &id);
                     return Ok((id.clone(), record_name));
                 }
@@ -164,10 +168,11 @@ impl<'a> Cdu<'a> {
                     None => bail!("DNS record not found: {}", record_name),
                 };
                 if let Some(ttl) = cache_ttl {
-                    cache
-                        .lock()
-                        .unwrap()
-                        .insert((RECORD, record_name.clone()), id.clone(), ttl);
+                    cache.lock().unwrap().insert(
+                        (CacheType::Record, record_name.clone()),
+                        id.clone(),
+                        ttl,
+                    );
                 }
                 debug!("record fetched from Cloudflare: {} ({})", &record_name, &id);
                 Ok((id, record_name))

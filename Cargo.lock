@@ -187,17 +187,19 @@ checksum = "22a9137b95ea06864e018375b72adfb7db6e6f68cfc8df5a04d00288050485ee"
 
 [[package]]
 name = "cdu"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "anyhow",
  "chrono",
  "cloudflare",
  "cron",
+ "derivative",
  "env_logger",
  "futures",
  "log",
  "public-ip",
  "structopt",
+ "thiserror",
  "tokio",
  "tokio-retry",
  "ttl_cache",
@@ -402,6 +404,17 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "rusticata-macros",
+]
+
+[[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

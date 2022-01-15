@@ -12,10 +12,16 @@
 
 //! Cloudflare DNS record update
 
+use thiserror::Error;
+
 pub use crate::cdu::Cdu;
-pub use crate::error::PublicIPError;
-pub use crate::opts::Opts;
 
 mod cdu;
-mod error;
-mod opts;
+
+/// Error from [`Cdu`]
+#[derive(Clone, Copy, Debug, Error)]
+pub enum RecoverableError {
+    /// Recoverable: Failed to determine IPv4 address
+    #[error("failed to determine IPv4 address")]
+    IpV4,
+}
