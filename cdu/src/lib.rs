@@ -13,7 +13,6 @@
 //! Cloudflare DNS record update
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::fmt::Display;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
@@ -62,8 +61,8 @@ pub struct Cdu<'a> {
     cache: Arc<Mutex<TtlCache<(CacheType, String), String>>>,
     /// Cache latest IP address for how many seconds
     pub cache_seconds: Option<u64>,
-    // [`tokio_retry::RetryIf`] denies mutable borrowing
-    last_ip: RefCell<Option<Ipv4Addr>>,
+    /// Last IP address fetched
+    pub last_ip: Option<Ipv4Addr>,
 }
 
 impl<'a> Cdu<'a> {
@@ -84,7 +83,7 @@ impl<'a> Cdu<'a> {
             // zone identifier and record identifiers
             cache: Arc::new(Mutex::new(TtlCache::new(capacity + 1))),
             cache_seconds: None,
-            last_ip: RefCell::new(None),
+            last_ip: None,
         }
     }
 
@@ -139,14 +138,13 @@ impl<'a> Cdu<'a> {
     }
 
     /// Perform DNS record update on Cloudflare
-    pub async fn run(&self) -> anyhow::Result<()> {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         let current_ip = public_ip::addr_v4()
             .await
             .context("failed to determine IPv4 address")?;
         debug!("public IPv4 address: {}", &current_ip);
 
-        let last_ip = *self.last_ip.borrow();
-        if let Some(last_ip) = last_ip {
+        if let Some(last_ip) = self.last_ip {
             debug!(
                 "previous IPv4 address {}, current IPv4 address {}",
                 last_ip, current_ip
@@ -158,7 +156,7 @@ impl<'a> Cdu<'a> {
         } else {
             debug!("current IPv4 address {}", current_ip);
         }
-        *self.last_ip.borrow_mut() = Some(current_ip);
+        self.last_ip = Some(current_ip);
 
         let client = Arc::new(self.build_client()?);
         let (elapsed1, zone_id) = self.get_zone_identifier(client.clone()).await?;

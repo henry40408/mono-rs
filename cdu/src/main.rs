@@ -1,28 +1,26 @@
 #![deny(
-    missing_docs,
-    missing_debug_implementations,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unstable_features,
-    unused_import_braces,
-    unused_qualifications
+missing_docs,
+missing_debug_implementations,
+missing_copy_implementations,
+trivial_casts,
+trivial_numeric_casts,
+unsafe_code,
+unstable_features,
+unused_import_braces,
+unused_qualifications
 )]
 
 //! Cloudflare DNS record update
 
 use std::borrow::Cow;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use cloudflare::framework::response::ApiFailure;
 use cron::Schedule;
 use env_logger::Env;
-use log::{debug, info};
+use log::{debug, info, warn};
 use structopt::StructOpt;
-use tokio_retry::strategy::{jitter, ExponentialBackoff};
 
 use cdu::{Cdu, RecoverableError};
 
@@ -67,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
 
     if opts.daemon {
         debug!("run as daemon with cron {}", opts.cron);
-        run_daemon(cdu, &opts.cron).await?;
+        run_daemon(&mut cdu, &opts.cron).await?;
     } else {
         debug!("run once");
         cdu.run().await?;
@@ -76,11 +74,10 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_daemon<'a, T>(cdu: Cdu<'_>, cron: T) -> anyhow::Result<()>
-where
-    T: Into<Cow<'a, str>>,
+async fn run_daemon<'a, T>(cdu: &mut Cdu<'_>, cron: T) -> anyhow::Result<()>
+    where
+        T: Into<Cow<'a, str>>,
 {
-    let cdu = Arc::new(cdu);
     let schedule = Schedule::from_str(cron.into().as_ref())?;
     for datetime in schedule.upcoming(chrono::Utc) {
         info!("update DNS records at {}", datetime);
@@ -93,15 +90,17 @@ where
             }
         }
 
-        let strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
-        let cdu = cdu.clone();
         let start = Instant::now();
-        tokio_retry::RetryIf::spawn(
-            strategy,
-            || cdu.run(),
-            |e: &anyhow::Error| e.is::<ApiFailure>() || e.is::<RecoverableError>(),
-        )
-        .await?;
+        match cdu.run().await {
+            Ok(_) => {}
+            Err(e) => {
+                if e.is::<ApiFailure>() || e.is::<RecoverableError>() {
+                    warn!("retry because of {:?}", e);
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         let elapsed = start.elapsed();
         info!("done in {}ms", elapsed.as_millis());
     }
