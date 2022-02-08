@@ -1,19 +1,20 @@
 #![deny(
-missing_docs,
-missing_debug_implementations,
-missing_copy_implementations,
-trivial_casts,
-trivial_numeric_casts,
-unsafe_code,
-unstable_features,
-unused_import_braces,
-unused_qualifications
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unstable_features,
+    unused_import_braces,
+    unused_qualifications
 )]
 
 //! Cloudflare DNS record update
 
 use std::borrow::Cow;
 use std::str::FromStr;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use cloudflare::framework::response::ApiFailure;
@@ -68,15 +69,48 @@ async fn main() -> anyhow::Result<()> {
         run_daemon(&mut cdu, &opts.cron).await?;
     } else {
         debug!("run once");
-        cdu.run().await?;
+        run_once(&mut cdu).await?;
     }
 
     Ok(())
 }
 
+async fn run_once(cdu: &mut Cdu<'_>) -> anyhow::Result<()> {
+    let start = Instant::now();
+
+    let min = Duration::from_millis(100);
+    let max = Duration::from_secs(10);
+    let backoff = exponential_backoff::Backoff::new(10, min, max);
+
+    let mut iter = backoff.iter();
+    loop {
+        let duration = iter.next();
+        match cdu.run().await {
+            Ok(_) => break,
+            Err(e) => {
+                if let Some(duration) = duration {
+                    if e.is::<ApiFailure>() || e.is::<RecoverableError>() {
+                        warn!("retry in {:?} because of {}", duration, e);
+                        thread::sleep(duration);
+                    } else {
+                        return Err(e);
+                    }
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    let elapsed = start.elapsed();
+    info!("done in {}ms", elapsed.as_millis());
+
+    Ok(())
+}
+
 async fn run_daemon<'a, T>(cdu: &mut Cdu<'_>, cron: T) -> anyhow::Result<()>
-    where
-        T: Into<Cow<'a, str>>,
+where
+    T: Into<Cow<'a, str>>,
 {
     let schedule = Schedule::from_str(cron.into().as_ref())?;
     for datetime in schedule.upcoming(chrono::Utc) {
@@ -90,19 +124,7 @@ async fn run_daemon<'a, T>(cdu: &mut Cdu<'_>, cron: T) -> anyhow::Result<()>
             }
         }
 
-        let start = Instant::now();
-        match cdu.run().await {
-            Ok(_) => {}
-            Err(e) => {
-                if e.is::<ApiFailure>() || e.is::<RecoverableError>() {
-                    warn!("retry because of {:?}", e);
-                } else {
-                    return Err(e);
-                }
-            }
-        };
-        let elapsed = start.elapsed();
-        info!("done in {}ms", elapsed.as_millis());
+        run_once(cdu).await?;
     }
 
     Ok(())

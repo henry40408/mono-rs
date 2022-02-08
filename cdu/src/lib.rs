@@ -18,7 +18,7 @@ use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context};
+use anyhow::bail;
 use cloudflare::endpoints::dns::{
     DnsContent, DnsRecord, ListDnsRecords, ListDnsRecordsParams, UpdateDnsRecord,
     UpdateDnsRecordParams,
@@ -139,9 +139,8 @@ impl<'a> Cdu<'a> {
 
     /// Perform DNS record update on Cloudflare
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        let current_ip = public_ip::addr_v4()
-            .await
-            .context("failed to determine IPv4 address")?;
+        let current_ip = public_ip::addr_v4().await.ok_or(RecoverableError::IpV4)?;
+
         debug!("public IPv4 address: {}", &current_ip);
 
         if let Some(last_ip) = self.last_ip {
@@ -156,7 +155,6 @@ impl<'a> Cdu<'a> {
         } else {
             debug!("current IPv4 address {}", current_ip);
         }
-        self.last_ip = Some(current_ip);
 
         let client = Arc::new(self.build_client()?);
         let (elapsed1, zone_id) = self.get_zone_identifier(client.clone()).await?;
@@ -251,6 +249,9 @@ impl<'a> Cdu<'a> {
 
         info!("took {}ms to fetch zone record, {}ms to fetch DNS records, and {}ms to update DNS records", elapsed1.as_millis(),
         elapsed2.as_millis(),elapsed3.as_millis());
+
+        // save current IP address when update succeeds
+        self.last_ip = Some(current_ip);
 
         Ok(())
     }
