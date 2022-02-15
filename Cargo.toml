@@ -4,6 +4,7 @@ members = [
     "hcc/core",
     "hcc/pushover",
     "hcc/server",
+    "nlm",
     "pushover/pushover",
     "pushover/po",
     "pop",
