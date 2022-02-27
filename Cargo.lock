@@ -735,21 +735,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hcc-server"
-version = "0.2.4"
-dependencies = [
- "anyhow",
- "env_logger",
- "hcc",
- "log",
- "serde",
- "serde_derive",
- "structopt",
- "tokio",
- "warp",
-]
-
-[[package]]
 name = "headers"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
