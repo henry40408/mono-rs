@@ -5,7 +5,6 @@ members = [
     "hcc/pushover",
     "pushover/pushover",
     "pushover/po",
-    "pop",
     "wfs"
 ]
 
