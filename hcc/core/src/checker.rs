@@ -107,7 +107,7 @@ impl Checker {
 
         let not_after = match parse_x509_certificate(certificate.as_ref()) {
             Ok((_, cert)) => cert.validity().not_after,
-            Err(_) => return Checked::default(),
+            Err(e) => return Checked::error(domain_name, e),
         };
         let not_after = Utc.timestamp(not_after.timestamp(), 0);
 
