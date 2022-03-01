@@ -3,10 +3,8 @@ members = [
     "cdu",
     "hcc/core",
     "hcc/pushover",
-    "hcc/server",
     "pushover/pushover",
     "pushover/po",
-    "pop",
     "wfs"
 ]
 

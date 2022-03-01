@@ -41,6 +41,9 @@ struct Opts {
     /// Pushover user key,
     #[structopt(short = "u", long = "user", env = "PUSHOVER_USER")]
     pushover_user: String,
+    /// Run immediately
+    #[structopt(long = "run-immediately", env = "RUN_IMMEDIATELY")]
+    run_immediately: bool,
 }
 
 #[tokio::main]
@@ -52,6 +55,11 @@ async fn main() -> anyhow::Result<()> {
 
     info!("check HTTPS certificates with cron {}", &opts.cron);
     for datetime in schedule.upcoming(Utc) {
+        let domain_names: Vec<_> = opts.domain_names.split(',').collect();
+        if opts.run_immediately {
+            info!("run immediately");
+            check_domain_names(&opts, &domain_names).await?;
+        }
         info!("check certificate of {} at {}", opts.domain_names, datetime);
         loop {
             if Utc::now() > datetime {
@@ -60,11 +68,7 @@ async fn main() -> anyhow::Result<()> {
                 tokio::time::sleep(Duration::from_millis(999)).await;
             }
         }
-        let start = Instant::now();
-        let domain_names: Vec<_> = opts.domain_names.split(',').collect();
         check_domain_names(&opts, &domain_names).await?;
-        let elapsed = start.elapsed();
-        info!("done in {}ms", elapsed.as_millis());
     }
 
     Ok(())
@@ -72,14 +76,14 @@ async fn main() -> anyhow::Result<()> {
 
 async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Result<()> {
     let check_client = Checker::default();
-    let results = check_client.check_many(domain_names).await?;
+    let results = check_client.check_many(domain_names).await;
 
     let mut tasks = vec![];
-
-    for result in results {
+    for (index, result) in results.iter().enumerate() {
         let r = Arc::new(result);
+        let domain_name = domain_names.get(index).unwrap().to_string();
         tasks.push(async move {
-            let title = format!("HTTP Certificate Check - {}", r.domain_name);
+            let title = format!("HTTP Certificate Check - {}", domain_name);
 
             let state_icon = r.state_icon();
             let sentence = r.sentence();
@@ -93,7 +97,10 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
         });
     }
 
+    let start = Instant::now();
     futures::future::try_join_all(tasks).await?;
+    let elapsed = start.elapsed();
+    info!("done in {}ms", elapsed.as_millis());
 
     Ok(())
 }
