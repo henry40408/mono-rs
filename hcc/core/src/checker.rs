@@ -102,7 +102,7 @@ impl Checker {
 
         let certificate = match certificates.first() {
             Some(c) => c,
-            None => return Checked::error(domain_name, "no peer certificate"),
+            None => return Checked::error(domain_name, "no peer certificate found"),
         };
 
         let not_after = match parse_x509_certificate(certificate.as_ref()) {
