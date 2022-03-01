@@ -4,13 +4,14 @@ use std::fmt::Formatter;
 
 use chrono::{DateTime, TimeZone, Utc};
 use num_format::{Locale, ToFormattedString};
-use serde::{Deserialize, Serialize};
 
 /// State of SSL certificate
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub enum CertificateState {
     /// Default state
     NotChecked,
+    /// Any error occurred when
+    Error(String),
     /// Certificate is valid
     Ok {
         /// Remaining days to the expiration date
@@ -42,6 +43,7 @@ impl fmt::Display for CertificateState {
             CertificateState::Ok { .. } => write!(f, "OK"),
             CertificateState::Warning { .. } => write!(f, "WARNING"),
             CertificateState::Expired => write!(f, "EXPIRED"),
+            CertificateState::Error(..) => write!(f, "ERROR"),
         }
     }
 }
@@ -62,6 +64,24 @@ pub struct Checked<'a> {
 }
 
 impl<'a> Checked<'a> {
+    /// Error occurred when checking
+    ///
+    /// ```
+    /// use hcc::Checked;
+    /// Checked::error("example.invalid", "invalid DNS lookup");
+    /// ```
+    pub fn error<T, U>(domain_name: T, e: U) -> Self
+    where
+        T: Into<Cow<'a, str>>,
+        U: std::fmt::Display,
+    {
+        Checked {
+            state: CertificateState::Error(e.to_string()),
+            domain_name: domain_name.into(),
+            ..Default::default()
+        }
+    }
+
     /// Create a result from expired domain name and when the check occurred
     ///
     /// ```
@@ -106,6 +126,9 @@ impl<'a> Checked<'a> {
                 Utc.timestamp(not_after, 0).to_rfc3339()
             ),
             CertificateState::Expired => format!("certificate of {} has expired", self.domain_name),
+            CertificateState::Error(ref e) => {
+                format!("failed to check {}: {}", self.domain_name, e)
+            }
         }
     }
 
@@ -139,7 +162,7 @@ impl<'a> Checked<'a> {
                     "\u{26a0}\u{fe0f}"
                 }
             }
-            CertificateState::Expired => {
+            CertificateState::Expired | CertificateState::Error(_) => {
                 if self.ascii {
                     "[x]"
                 } else {
@@ -166,63 +189,6 @@ impl<'a> fmt::Display for Checked<'a> {
         }
 
         write!(f, "{}", s)
-    }
-}
-
-/// Check result in JSON format
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct CheckedJSON {
-    /// State of certificate
-    pub state: String,
-    /// When is the domain name got checked
-    pub checked_at: String,
-    /// Remaining days to the expiration date
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub days: Option<i64>,
-    /// Domain name that got checked
-    pub domain_name: String,
-    /// Expiration time in RFC3389 format
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expired_at: Option<String>,
-    /// Elapsed time in milliseconds
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub elapsed: Option<u128>,
-}
-
-impl CheckedJSON {
-    /// Convert result to JSON
-    ///
-    /// ```
-    /// # use hcc::{Checked, CheckedJSON};
-    /// use chrono::Utc;
-    /// let checked = Checked {
-    ///     domain_name: "sha512.badssl.com".into(),
-    ///     checked_at: Utc::now().timestamp(),
-    ///     ..Default::default()
-    /// };
-    /// CheckedJSON::new(&checked);
-    /// ```
-    pub fn new(checked: &Checked) -> CheckedJSON {
-        CheckedJSON {
-            state: checked.state.to_string(),
-            days: match checked.state {
-                CertificateState::NotChecked | CertificateState::Expired => None,
-                CertificateState::Ok { days, not_after: _ } => Some(days),
-                CertificateState::Warning { days, not_after: _ } => Some(days),
-            },
-            domain_name: checked.domain_name.to_string(),
-            checked_at: Utc.timestamp(checked.checked_at, 0).to_rfc3339(),
-            expired_at: match checked.state {
-                CertificateState::NotChecked | CertificateState::Expired => None,
-                CertificateState::Ok { days: _, not_after } => {
-                    Some(Utc.timestamp(not_after, 0).to_rfc3339())
-                }
-                CertificateState::Warning { days: _, not_after } => {
-                    Some(Utc.timestamp(not_after, 0).to_rfc3339())
-                }
-            },
-            elapsed: checked.elapsed,
-        }
     }
 }
 

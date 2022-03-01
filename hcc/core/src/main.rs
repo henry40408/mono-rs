@@ -14,7 +14,7 @@
 
 use structopt::StructOpt;
 
-use hcc::{CheckedJSON, Checker};
+use hcc::Checker;
 
 #[derive(Debug, Default, StructOpt)]
 #[structopt(author, about)]
@@ -22,9 +22,6 @@ struct Opts {
     /// ASCII
     #[structopt(short, long)]
     ascii: bool,
-    /// Output in JSON format
-    #[structopt(short, long)]
-    json: bool,
     /// Verbose mode
     #[structopt(short, long)]
     verbose: bool,
@@ -47,87 +44,59 @@ enum Command {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
     let opts: Opts = Opts::from_args();
-    match opts.command {
-        Some(Command::Check {
-            ref domain_names,
-            grace_in_days,
-        }) => {
-            let domain_names: Vec<&str> = domain_names.iter().map(AsRef::as_ref).collect();
-            check_command(&opts, &domain_names, grace_in_days).await
-        }
-        None => Ok(()),
+    if let Some(Command::Check {
+        ref domain_names,
+        grace_in_days,
+    }) = opts.command
+    {
+        let domain_names: Vec<&str> = domain_names.iter().map(AsRef::as_ref).collect();
+        check_command(&opts, &domain_names, grace_in_days).await;
     }
 }
 
-async fn check_command(
-    opts: &Opts,
-    domain_names: &[&str],
-    grace_in_days: i64,
-) -> anyhow::Result<()> {
+async fn check_command(opts: &Opts, domain_names: &[&str], grace_in_days: i64) {
     let mut client = Checker::default();
     client.ascii = opts.ascii;
     client.elapsed = opts.verbose;
     client.grace_in_days = grace_in_days;
 
-    let results = client.check_many(domain_names).await?;
-
-    if opts.json {
-        let s = if results.len() > 1 {
-            let json: Vec<CheckedJSON> = results.iter().map(CheckedJSON::new).collect();
-            serde_json::to_string(&json)?
-        } else {
-            let result = results.get(0).unwrap();
-            let json = CheckedJSON::new(result);
-            serde_json::to_string(&json)?
-        };
-        println!("{0}", s);
-    } else {
-        for r in results {
-            println!("{0}", r);
-        }
+    let results = client.check_many(domain_names).await;
+    for result in results.iter() {
+        println!("{}", result);
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod test {
     use crate::{check_command, Opts};
 
-    fn build_opts(json: bool) -> Opts {
-        Opts {
-            json,
-            ..Default::default()
-        }
+    fn build_opts() -> Opts {
+        Opts::default()
     }
 
     #[tokio::test]
-    async fn test_check_command() -> anyhow::Result<()> {
-        let opts = build_opts(false);
-        check_command(&opts, &vec!["sha512.badssl.com"], 7).await?;
-        Ok(())
+    async fn test_check_command() {
+        let opts = build_opts();
+        check_command(&opts, &["sha512.badssl.com"], 7).await;
     }
 
     #[tokio::test]
-    async fn test_check_command_json() -> anyhow::Result<()> {
-        let opts = build_opts(true);
-        check_command(&opts, &vec!["sha512.badssl.com"], 7).await?;
-        Ok(())
+    async fn test_check_command_json() {
+        let opts = build_opts();
+        check_command(&opts, &["sha512.badssl.com"], 7).await;
     }
 
     #[tokio::test]
-    async fn test_check_command_expired() -> anyhow::Result<()> {
-        let opts = build_opts(false);
-        check_command(&opts, &vec!["expired.badssl.com"], 7).await?;
-        Ok(())
+    async fn test_check_command_expired() {
+        let opts = build_opts();
+        check_command(&opts, &["expired.badssl.com"], 7).await;
     }
 
     #[tokio::test]
-    async fn test_check_command_expired_json() -> anyhow::Result<()> {
-        let opts = build_opts(true);
-        check_command(&opts, &vec!["expired.badssl.com"], 7).await?;
-        Ok(())
+    async fn test_check_command_expired_json() {
+        let opts = build_opts();
+        check_command(&opts, &["expired.badssl.com"], 7).await;
     }
 }
