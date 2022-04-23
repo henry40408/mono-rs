@@ -12,6 +12,7 @@
 
 //! po is a command line application based on Pushover API
 
+use anyhow::bail;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -95,9 +96,10 @@ async fn main() -> anyhow::Result<()> {
 
     // send request
     let res = notification.send().await?;
-    if opts.verbose {
-        println!("{:?}", res);
+    if res.status != 1 {
+        bail!(format!("{res:?}"));
+    } else if opts.verbose {
+        println!("{res:?}");
     }
-
     Ok(())
 }
