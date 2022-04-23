@@ -1,6 +1,6 @@
 [package]
 name = "cdu"
-version = "1.1.5"
+version = "1.1.6"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2021"
 description = "Cloudflare DNS record update"
@@ -11,7 +11,7 @@ description = "Cloudflare DNS record update"
 anyhow = "1"
 chrono = { version = "0.4", default-features = false }
 cloudflare = { version = "0.9.1", default-features = false, features = ["rustls-tls"] }
-cron = "0.9"
+cron = "0.11"
 derivative = "2.2"
 env_logger = "0.9"
 exponential-backoff = "1.1"

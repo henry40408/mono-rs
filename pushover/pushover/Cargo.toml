@@ -1,6 +1,6 @@
 [package]
 name = "pushover"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 description = "Pushover is Pushover API wrapper with attachment support in Rust 2021 edition"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
@@ -9,15 +9,15 @@ authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 
 [dependencies]
 ammonia = "3"
-infer = "0.6"
+infer = "0.7"
 maplit = "1"
 reqwest = { version = "0.11", default-features = false, features = ["multipart", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-strum = { version = "0.23", features = ["derive"] }
+strum = { version = "0.24", features = ["derive"] }
 thiserror = "1"
 tokio = { version = "1", features = ["macros"] }
 url = "2.2"
 
 [dev-dependencies]
-mockito = "0.30"
+mockito = "0.31"

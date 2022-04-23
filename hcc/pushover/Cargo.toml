@@ -1,6 +1,6 @@
 [package]
 name = "hcc-pushover"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2021"
 description = "Daemon to send check result to Pushover"
@@ -10,7 +10,7 @@ description = "Daemon to send check result to Pushover"
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-cron = "0.9"
+cron = "0.11"
 env_logger = "0.9"
 log = "0.4"
 futures = { version = "0.3", default-features = false }
