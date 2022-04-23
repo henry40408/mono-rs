@@ -66,8 +66,8 @@ impl Checker {
     /// ```
     /// # use hcc::Checker;
     /// let client = Checker::default();
-    /// client.check_one("sha512.badssl.com");
-    /// client.check_one("sha512.badssl.com".to_string());
+    /// client.check_one("sha256.badssl.com");
+    /// client.check_one("sha256.badssl.com".to_string());
     /// ```
     pub async fn check_one<'a, T>(&'a self, domain_name: T) -> Checked<'a>
     where
@@ -179,7 +179,7 @@ mod test {
     #[tokio::test]
     async fn test_good_certificate() {
         let client = Checker::default();
-        let result = client.check_one("sha512.badssl.com").await;
+        let result = client.check_one("sha256.badssl.com").await;
         assert!(matches!(result.state, CertificateState::Ok { .. }));
         assert!(result.checked_at > 0);
         if let CertificateState::Ok { days, not_after } = result.state {
@@ -198,13 +198,14 @@ mod test {
 
     #[tokio::test]
     async fn test_check_many() -> anyhow::Result<()> {
-        let domain_names = vec!["sha512.badssl.com", "expired.badssl.com"];
+        let domain_names = vec!["sha256.badssl.com", "expired.badssl.com"];
         let client = Checker::default();
 
         let results = client.check_many(domain_names.as_slice()).await;
         assert_eq!(2, results.len());
 
         let result = results.get(0).unwrap();
+        dbg!(&result);
         assert!(matches!(result.state, CertificateState::Ok { .. }));
 
         let result = results.get(1).unwrap();
@@ -215,7 +216,7 @@ mod test {
 
     #[tokio::test]
     async fn test_check_many_with_grace_in_days() {
-        let domain_name = "sha512.badssl.com";
+        let domain_name = "sha256.badssl.com";
 
         let client = Checker::default();
         let result = client.check_one(domain_name).await;

@@ -79,13 +79,13 @@ mod test {
     #[tokio::test]
     async fn test_check_command() {
         let opts = build_opts();
-        check_command(&opts, &["sha512.badssl.com"], 7).await;
+        check_command(&opts, &["sha256.badssl.com"], 7).await;
     }
 
     #[tokio::test]
     async fn test_check_command_json() {
         let opts = build_opts();
-        check_command(&opts, &["sha512.badssl.com"], 7).await;
+        check_command(&opts, &["sha256.badssl.com"], 7).await;
     }
 
     #[tokio::test]
