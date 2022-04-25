@@ -18,7 +18,7 @@ hcc check httpbin.org
 ### Daemon and Pushover
 
 ```bash
-$ export DOMAIN_NAMES=www.example.com,sha512.badssl.com
+$ export DOMAIN_NAMES=www.example.com,sha256.badssl.com
 $ export PUSHOVER_TOKEN=[Pushover API token]
 $ export PUSHOVER_USER=[Pushover user key]
 $ hcc-pushover

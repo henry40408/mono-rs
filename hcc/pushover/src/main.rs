@@ -29,7 +29,7 @@ use pushover::Notification;
 #[derive(Debug, StructOpt)]
 #[structopt(author, about)]
 struct Opts {
-    /// Domain names to check, separated by comma e.g. sha512.badssl.com,expired.badssl.com
+    /// Domain names to check, separated by comma e.g. sha256.badssl.com,expired.badssl.com
     #[structopt(short, long, env = "DOMAIN_NAMES")]
     domain_names: String,
     /// Cron
