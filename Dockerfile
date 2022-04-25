@@ -13,10 +13,6 @@ RUN cp /target/$(cat /target.txt)/release/* /tmp/
 
 FROM scratch
 
-COPY --from=builder /tmp/cdu /
-COPY --from=builder /tmp/hcc /
-COPY --from=builder /tmp/hcc-pushover /
-COPY --from=builder /tmp/po /
-COPY --from=builder /tmp/wfs /
+COPY --from=builder /tmp/cdu /tmp/hcc /tmp/hcc-pushover /tmp/po /tmp/wfs /
 
 CMD ["/wfs"]
