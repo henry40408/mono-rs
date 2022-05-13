@@ -16,7 +16,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::bail;
 use cloudflare::endpoints::dns::{
@@ -29,7 +29,8 @@ use cloudflare::framework::auth::Credentials;
 use cloudflare::framework::response::ApiSuccess;
 use cloudflare::framework::{Environment, HttpApiClientConfig};
 use derivative::Derivative;
-use log::{debug, info};
+use log::{debug, Level};
+use logging_timer::{finish, stimer};
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use ttl_cache::TtlCache;
@@ -55,7 +56,8 @@ enum CacheType {
 #[derivative(Debug)]
 pub struct Cdu<'a> {
     token: Cow<'a, str>,
-    zone: Cow<'a, str>,
+    /// DNS zone
+    pub zone: Cow<'a, str>,
     record_names: Vec<String>,
     #[derivative(Debug = "ignore")]
     cache: Arc<Mutex<TtlCache<(CacheType, String), String>>>,
@@ -91,7 +93,7 @@ impl<'a> Cdu<'a> {
         self.cache_seconds.map(Duration::from_secs)
     }
 
-    async fn get_zone_identifier(&self, client: Arc<Client>) -> anyhow::Result<(Duration, String)> {
+    async fn get_zone_identifier(&self, client: Arc<Client>) -> anyhow::Result<String> {
         if let Some(id) = self
             .cache
             .lock()
@@ -99,7 +101,7 @@ impl<'a> Cdu<'a> {
             .get(&(CacheType::Zone, self.zone.to_string()))
         {
             debug!("zone found in cache: {} ({})", &self.zone, &id);
-            return Ok((Duration::from_millis(0), id.clone()));
+            return Ok(id.clone());
         }
 
         let params = ListZones {
@@ -109,11 +111,8 @@ impl<'a> Cdu<'a> {
             },
         };
 
-        let start = Instant::now();
+        let tmr = stimer!(Level::Debug; "FETCH_ZONE", "zone {}", self.zone);
         let res: ApiSuccess<Vec<Zone>> = client.request(&params).await?;
-        let elapsed = start.elapsed();
-        debug!("took {}ms to fetch zone identifier", elapsed.as_millis());
-
         let id = match res.result.first() {
             Some(zone) => zone.id.to_string(),
             None => bail!("zone not found: {}", self.zone),
@@ -122,8 +121,8 @@ impl<'a> Cdu<'a> {
             let mut cache = self.cache.lock().unwrap();
             cache.insert((CacheType::Zone, self.zone.to_string()), id.clone(), ttl);
         }
-        debug!("zone fetched from Cloudflare: {} ({})", &self.zone, &id);
-        Ok((elapsed, id))
+        finish!(tmr, "zone ID {}", &id);
+        Ok(id)
     }
 
     fn build_client(&self) -> anyhow::Result<Client> {
@@ -139,25 +138,22 @@ impl<'a> Cdu<'a> {
 
     /// Perform DNS record update on Cloudflare
     pub async fn run(&mut self) -> anyhow::Result<()> {
+        let tmr = stimer!(Level::Debug; "FETCH_IP_ADDRESS");
         let current_ip = public_ip::addr_v4().await.ok_or(RecoverableError::IpV4)?;
-
-        debug!("public IPv4 address: {}", &current_ip);
+        finish!(tmr, "public IP address {:?}", &current_ip);
 
         if let Some(last_ip) = self.last_ip {
-            debug!(
-                "previous IPv4 address {}, current IPv4 address {}",
-                last_ip, current_ip
-            );
             if current_ip == last_ip {
-                info!("IPv4 address remains unchanged, skip");
+                debug!("IPv4 address remains unchanged, skip");
                 return Ok(());
             }
+            debug!("IPv4 address changed from {} to {}", last_ip, current_ip);
         } else {
-            debug!("current IPv4 address {}", current_ip);
+            debug!("no previous IPv4 address found, continue");
         }
 
         let client = Arc::new(self.build_client()?);
-        let (elapsed1, zone_id) = self.get_zone_identifier(client.clone()).await?;
+        let zone_id = self.get_zone_identifier(client.clone()).await?;
 
         let mut tasks = vec![];
         for record_name in &self.record_names {
@@ -182,6 +178,7 @@ impl<'a> Cdu<'a> {
                         ..Default::default()
                     },
                 };
+                let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORD", "DNS record {}", &record_name);
                 let res: ApiSuccess<Vec<DnsRecord>> = client.request(&params).await?;
                 let id = match res.result.first() {
                     Some(dns_record) => dns_record.id.clone(),
@@ -194,24 +191,18 @@ impl<'a> Cdu<'a> {
                         ttl,
                     );
                 }
-                debug!("record fetched from Cloudflare: {} ({})", &record_name, &id);
+                finish!(tmr, "DNS record ID {}", &id);
                 Ok((id, record_name))
             }));
         }
 
         let mut dns_record_ids = vec![];
-        let start = Instant::now();
         for task in futures::future::join_all(tasks).await {
             let (dns_record_id, record_name) = task??;
             dns_record_ids.push((dns_record_id, record_name));
         }
-        let elapsed2 = start.elapsed();
-        debug!(
-            "took {}ms to fetch record identifiers",
-            elapsed2.as_millis()
-        );
 
-        let mut tasks: Vec<JoinHandle<anyhow::Result<(String, String, String)>>> = vec![];
+        let mut tasks: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
         for (dns_record_id, record_name) in dns_record_ids {
             let client = client.clone();
             let zone_id = zone_id.clone();
@@ -228,27 +219,23 @@ impl<'a> Cdu<'a> {
                         ttl: None,
                     },
                 };
+                let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORD", "DNS record {} ({})", &record_name, &dns_record_id);
                 let res: ApiSuccess<DnsRecord> = client.request(&params).await?;
                 let dns_record = res.result;
                 let content = match dns_record.content {
                     DnsContent::A { content } => content.to_string(),
                     _ => "(not an A record)".into(),
                 };
-
-                Ok((record_name, dns_record_id, content))
+                finish!(tmr, "content {}", &content);
+                Ok(())
             }));
         }
 
-        let start = Instant::now();
+        let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORDS", "update {} DNS records", tasks.len());
         for task in futures::future::join_all(tasks).await {
-            let (r, d, c) = task??;
-            debug!("DNS record updated: {} ({}) -> {}", &r, &d, &c);
+            task??;
         }
-        let elapsed3 = start.elapsed();
-        debug!("took {}ms to update DNS records", elapsed3.as_millis());
-
-        info!("took {}ms to fetch zone record, {}ms to fetch DNS records, and {}ms to update DNS records", elapsed1.as_millis(),
-        elapsed2.as_millis(),elapsed3.as_millis());
+        finish!(tmr);
 
         // save current IP address when update succeeds
         self.last_ip = Some(current_ip);

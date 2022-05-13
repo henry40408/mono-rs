@@ -45,7 +45,7 @@ impl Default for Checker {
             )
         }));
 
-        let config = rustls::ClientConfig::builder()
+        let config = ClientConfig::builder()
             .with_safe_defaults()
             .with_root_certificates(root_store)
             .with_no_client_auth();
@@ -91,7 +91,7 @@ impl Checker {
         let start = Instant::now();
         match tls.write(Self::build_http_headers(domain_name.as_ref()).as_bytes()) {
             Ok(_) => (),
-            Err(_e) => return Checked::expired(domain_name, &self.checked_at),
+            Err(_e) => return Checked::expired(self.ascii, domain_name, &self.checked_at),
         };
         let elapsed = start.elapsed();
 
@@ -178,7 +178,9 @@ mod test {
 
     #[tokio::test]
     async fn test_good_certificate() {
-        let client = Checker::default();
+        let mut client = Checker::default();
+        client.grace_in_days = 1;
+
         let result = client.check_one("sha256.badssl.com").await;
         assert!(matches!(result.state, CertificateState::Ok { .. }));
         assert!(result.checked_at > 0);
@@ -190,7 +192,9 @@ mod test {
 
     #[tokio::test]
     async fn test_bad_certificate() {
-        let client = Checker::default();
+        let mut client = Checker::default();
+        client.grace_in_days = 1;
+
         let result = client.check_one("expired.badssl.com").await;
         assert!(matches!(result.state, CertificateState::Expired));
         assert!(result.checked_at > 0);
@@ -199,7 +203,9 @@ mod test {
     #[tokio::test]
     async fn test_check_many() -> anyhow::Result<()> {
         let domain_names = vec!["sha256.badssl.com", "expired.badssl.com"];
-        let client = Checker::default();
+
+        let mut client = Checker::default();
+        client.grace_in_days = 1;
 
         let results = client.check_many(domain_names.as_slice()).await;
         assert_eq!(2, results.len());
@@ -218,7 +224,9 @@ mod test {
     async fn test_check_many_with_grace_in_days() {
         let domain_name = "sha256.badssl.com";
 
-        let client = Checker::default();
+        let mut client = Checker::default();
+        client.grace_in_days = 1;
+
         let result = client.check_one(domain_name).await;
         assert!(matches!(result.state, CertificateState::Ok { .. }));
 

@@ -12,40 +12,40 @@
 
 //! HTTPS Certificate Check
 
-use structopt::StructOpt;
+use clap::Parser;
 
 use hcc::Checker;
 
-#[derive(Debug, Default, StructOpt)]
-#[structopt(author, about)]
+#[derive(Debug, Default, Parser)]
+#[clap(author, about, version)]
 struct Opts {
     /// ASCII
-    #[structopt(short, long)]
+    #[clap(short, long)]
     ascii: bool,
     /// Verbose mode
-    #[structopt(short, long)]
+    #[clap(short, long)]
     verbose: bool,
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     command: Option<Command>,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 enum Command {
     /// Check domain name(s) immediately
-    #[structopt()]
+    #[clap()]
     Check {
         /// Grace period in days
-        #[structopt(short, long = "grace", default_value = "7")]
+        #[clap(short, long = "grace", default_value = "7")]
         grace_in_days: i64,
         /// One or many domain names to check
-        #[structopt()]
+        #[clap()]
         domain_names: Vec<String>,
     },
 }
 
 #[tokio::main]
 async fn main() {
-    let opts: Opts = Opts::from_args();
+    let opts: Opts = Opts::parse();
     if let Some(Command::Check {
         ref domain_names,
         grace_in_days,

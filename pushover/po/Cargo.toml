@@ -1,6 +1,6 @@
 [package]
 name = "po"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 description = "Po is a command line application to send notifications to Pushover"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
@@ -9,6 +9,9 @@ authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 
 [dependencies]
 anyhow = "1"
+clap = { version = "3", default-features = false, features = ["derive", "env", "std"] }
+env_logger = "0.9"
+log = "0.4"
+logging_timer = "1"
 pushover = { path = "../pushover" }
-structopt = "0.3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

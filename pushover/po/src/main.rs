@@ -16,60 +16,65 @@ use anyhow::bail;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use structopt::StructOpt;
+use clap::Parser;
+use env_logger::Env;
+use log::Level;
+use logging_timer::{finish, stimer};
 
 use pushover::{Attachment, Monospace, Notification, Priority, Sound, HTML};
 
-#[derive(StructOpt)]
-#[structopt(about, author)]
+#[derive(Parser)]
+#[clap(about, author, version)]
 struct Opts {
     /// Your application's API token <https://pushover.net/api#identifiers>
-    #[structopt(short, long, env = "PUSHOVER_TOKEN")]
+    #[clap(short, long, env = "PUSHOVER_TOKEN")]
     token: String,
     /// The user / group key (not e-mail address) of your user (or you) <https://pushover.net/api#identifiers>
-    #[structopt(short, long, env = "PUSHOVER_USER")]
+    #[clap(short, long, env = "PUSHOVER_USER")]
     user: String,
     /// Your message <https://pushover.net/api#messages>
-    #[structopt(short, long)]
+    #[clap(short, long)]
     message: String,
     /// Verbose
-    #[structopt(short, long)]
+    #[clap(short, long)]
     verbose: bool,
     /// To enable HTML formatting. monospace may not be used if html is used, and vice versa. <https://pushover.net/api#html>
-    #[structopt(long)]
+    #[clap(long)]
     html: bool,
     /// To enable monospace messages. monospace may not be used if html is used, and vice versa. <https://pushover.net/api#html>
-    #[structopt(long)]
+    #[clap(long)]
     monospace: bool,
     /// Your user's device name to send the message directly to that device, rather than all of the user's devices <https://pushover.net/api#identifiers>
-    #[structopt(long)]
+    #[clap(long)]
     device: Option<String>,
     /// Your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
-    #[structopt(long)]
+    #[clap(long)]
     title: Option<String>,
     /// A Unix timestamp of your message's date and time to display to the user, rather than the time your message is received by our API <https://pushover.net/api#timestamp>
-    #[structopt(long)]
+    #[clap(long)]
     timestamp: Option<u64>,
     /// Attach file as notification attachment
-    #[structopt(short, long)]
+    #[clap(short, long)]
     file: Option<PathBuf>,
     /// Messages may be sent with a different priority that affects how the message is presented to the user e.g. -2, -1, 0, 1, 2 <https://pushover.net/api#priority>
-    #[structopt(long)]
+    #[clap(long)]
     priority: Option<String>,
     /// Users can choose from a number of different default sounds to play when receiving notifications <https://pushover.net/api#sounds>
-    #[structopt(long)]
+    #[clap(long)]
     sound: Option<String>,
     /// A supplementary URL to show with your message <https://pushover.net/api#urls>
-    #[structopt(long)]
+    #[clap(long)]
     url: Option<String>,
     /// A title for your supplementary URL, otherwise just the URL is shown <https://pushover.net/api#urls>
-    #[structopt(long)]
+    #[clap(long)]
     url_title: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opts: Opts = Opts::from_args();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
+    let opts: Opts = Opts::parse();
 
     let mut notification = Notification::new(&opts.token, &opts.user, &opts.message);
     notification.device = opts.device.as_deref();
@@ -94,8 +99,10 @@ async fn main() -> anyhow::Result<()> {
     };
     notification.attachment = attachment.as_ref();
 
-    // send request
+    let tmr = stimer!(Level::Debug; "NOTIFY");
     let res = notification.send().await?;
+    finish!(tmr);
+
     if res.status != 1 {
         bail!(format!("{res:?}"));
     } else if opts.verbose {
