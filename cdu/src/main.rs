@@ -15,43 +15,44 @@
 use std::borrow::Cow;
 use std::str::FromStr;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use clap::Parser;
 use cloudflare::framework::response::ApiFailure;
 use cron::Schedule;
 use env_logger::Env;
-use log::{debug, info, warn};
-use structopt::StructOpt;
+use log::{debug, info, warn, Level};
+use logging_timer::{finish, timer};
 
 use cdu::{Cdu, RecoverableError};
 
 /// Argument parser
-#[derive(Debug, StructOpt)]
-#[structopt(about, author)]
+#[derive(Debug, Parser)]
+#[clap(about, author, version)]
 pub struct Opts {
     /// Cloudflare token
-    #[structopt(short, long, env = "CLOUDFLARE_TOKEN")]
+    #[clap(short, long, env = "CLOUDFLARE_TOKEN")]
     pub token: String,
     /// Cloudflare zone name
-    #[structopt(short, long, env = "CLOUDFLARE_ZONE")]
+    #[clap(short, long, env = "CLOUDFLARE_ZONE")]
     pub zone: String,
     /// Cloudflare records separated with comma e.g. a.x.com,b.x.com
-    #[structopt(short, long, env = "CLOUDFLARE_RECORDS")]
+    #[clap(short, long, env = "CLOUDFLARE_RECORDS")]
     pub records: String,
     /// Daemon mode
-    #[structopt(short, long, env = "DAEMON")]
+    #[clap(short, long, env = "DAEMON")]
     pub daemon: bool,
     /// Cron. Only in effect in daemon mode
-    #[structopt(short, long, default_value = "0 */5 * * * * *", env = "CRON")]
+    #[clap(short, long, default_value = "0 */5 * * * * *", env = "CRON")]
     pub cron: String,
     /// Cache duration in seconds, give 0 to disable
-    #[structopt(short = "s", long, env = "CACHE_SECONDS")]
+    #[clap(short = 's', long, env = "CACHE_SECONDS")]
     pub cache_seconds: Option<u64>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opts: Opts = Opts::from_args();
+    let opts: Opts = Opts::parse();
 
     let record_names = opts
         .records
@@ -68,16 +69,15 @@ async fn main() -> anyhow::Result<()> {
         debug!("run as daemon with cron {}", opts.cron);
         run_daemon(&mut cdu, &opts.cron).await?;
     } else {
-        debug!("run once");
+        let tmr = timer!(Level::Debug; "RUN_ONCE", "zone {}", cdu.zone);
         run_once(&mut cdu).await?;
+        finish!(tmr);
     }
 
     Ok(())
 }
 
 async fn run_once(cdu: &mut Cdu<'_>) -> anyhow::Result<()> {
-    let start = Instant::now();
-
     let min = Duration::from_millis(100);
     let max = Duration::from_secs(10);
     let backoff = exponential_backoff::Backoff::new(10, min, max);
@@ -101,9 +101,6 @@ async fn run_once(cdu: &mut Cdu<'_>) -> anyhow::Result<()> {
             }
         }
     }
-
-    let elapsed = start.elapsed();
-    info!("done in {}ms", elapsed.as_millis());
 
     Ok(())
 }
