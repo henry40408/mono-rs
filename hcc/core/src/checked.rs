@@ -87,13 +87,14 @@ impl<'a> Checked<'a> {
     /// ```
     /// # use hcc::Checked;
     /// use chrono::Utc;
-    /// Checked::expired("expired.badssl.com", &Utc::now());
+    /// Checked::expired(false, "expired.badssl.com", &Utc::now());
     /// ```
-    pub fn expired<T>(domain_name: T, checked_at: &'a DateTime<Utc>) -> Self
+    pub fn expired<T>(ascii: bool, domain_name: T, checked_at: &'a DateTime<Utc>) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
         Checked {
+            ascii,
             state: CertificateState::Expired,
             checked_at: checked_at.timestamp(),
             domain_name: domain_name.into(),

@@ -1,6 +1,6 @@
 [package]
 name = "hcc"
-version = "3.0.1"
+version = "3.0.2"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2021"
 description = "HTTPS Certificate Check"
@@ -10,10 +10,10 @@ description = "HTTPS Certificate Check"
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "3", default-features = false, features = ["derive", "env", "std"] }
 futures = "0.3"
 num-format = "0.4"
 rustls = { version = "0.20", default-features = false, features = ["tls12"] }
-structopt = "0.3"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 webpki = "0.22"
 webpki-roots = "0.22"
