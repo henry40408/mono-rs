@@ -665,17 +665,18 @@ dependencies = [
 
 [[package]]
 name = "hcc-pushover"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "anyhow",
  "chrono",
+ "clap 3.1.18",
  "cron",
  "env_logger",
  "futures",
  "hcc",
  "log",
+ "logging_timer",
  "pushover",
- "structopt",
  "tokio",
 ]
 
@@ -1334,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "pushover"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "ammonia",
  "infer",

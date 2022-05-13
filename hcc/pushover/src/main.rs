@@ -15,34 +15,34 @@
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::time::Instant;
 
 use chrono::Utc;
+use clap::Parser;
 use cron::Schedule;
 use env_logger::Env;
-use log::info;
-use structopt::StructOpt;
+use log::{info, Level};
+use logging_timer::{finish, stimer};
 
 use hcc::Checker;
 use pushover::Notification;
 
-#[derive(Debug, StructOpt)]
-#[structopt(author, about)]
+#[derive(Debug, Parser)]
+#[clap(author, about, version)]
 struct Opts {
     /// Domain names to check, separated by comma e.g. sha256.badssl.com,expired.badssl.com
-    #[structopt(short, long, env = "DOMAIN_NAMES")]
+    #[clap(short, long, env = "DOMAIN_NAMES")]
     domain_names: String,
     /// Cron
-    #[structopt(short, long, env = "CRON", default_value = "0 */5 * * * * *")]
+    #[clap(short, long, env = "CRON", default_value = "0 */5 * * * * *")]
     cron: String,
     /// Pushover API key
-    #[structopt(short = "t", long = "token", env = "PUSHOVER_TOKEN")]
+    #[clap(short = 't', long = "token", env = "PUSHOVER_TOKEN")]
     pushover_token: String,
     /// Pushover user key,
-    #[structopt(short = "u", long = "user", env = "PUSHOVER_USER")]
+    #[clap(short = 'u', long = "user", env = "PUSHOVER_USER")]
     pushover_user: String,
     /// Run immediately
-    #[structopt(long = "run-immediately", env = "RUN_IMMEDIATELY")]
+    #[clap(long = "run-immediately", env = "RUN_IMMEDIATELY")]
     run_immediately: bool,
 }
 
@@ -50,7 +50,7 @@ struct Opts {
 async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let opts: Opts = Opts::from_args();
+    let opts: Opts = Opts::parse();
     let schedule = Schedule::from_str(&opts.cron)?;
 
     info!("check HTTPS certificates with cron {}", &opts.cron);
@@ -76,7 +76,9 @@ async fn main() -> anyhow::Result<()> {
 
 async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Result<()> {
     let check_client = Checker::default();
+    let tmr = stimer!("CHECK_CERT");
     let results = check_client.check_many(domain_names).await;
+    finish!(tmr);
 
     let mut tasks = vec![];
     for (index, result) in results.iter().enumerate() {
@@ -91,16 +93,16 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
 
             let mut n = Notification::new(&opts.pushover_token, &opts.pushover_user, &message);
             n.title = Some(&title);
+
+            let tmr = stimer!(Level::Debug; "NOTIFY");
             n.send().await?;
+            finish!(tmr);
 
             Ok::<(), anyhow::Error>(())
         });
     }
 
-    let start = Instant::now();
     futures::future::try_join_all(tasks).await?;
-    let elapsed = start.elapsed();
-    info!("done in {}ms", elapsed.as_millis());
 
     Ok(())
 }
