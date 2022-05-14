@@ -13,10 +13,11 @@
 //! Pushover is Pushover API wrapper with attachment support in Rust 2021 edition
 
 use maplit::{hashmap, hashset};
-use reqwest::multipart;
+use multipart::client::lazy::Multipart;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::io::Cursor;
 use thiserror::Error;
 
 pub use attachment::{Attachment, AttachmentError};
@@ -26,9 +27,9 @@ mod attachment;
 /// Notification error
 #[derive(Error, Debug)]
 pub enum NotificationError {
-    /// Error from [`reqwest`] crate
-    #[error("reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
+    /// Error from [`ureq`] crate
+    #[error("ureq error: {0}")]
+    UReq(#[from] Box<ureq::Error>),
     /// Error from [`serde_json`] crate
     #[error("deserialization error: {0}")]
     Deserialize(#[from] serde_json::Error),
@@ -38,6 +39,9 @@ pub enum NotificationError {
     /// HTML and monospace are mutually exclusive <https://pushover.net/api#html>
     #[error("html and monospace are mutually exclusive")]
     HTMLMonospace,
+    /// IO error
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Pushover API parameters <https://pushover.net/api#messages> and attachment
@@ -201,11 +205,9 @@ pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
         .to_string()
 }
 
-fn text_part<T: Display>(f: multipart::Form, n: &'static str, v: Option<T>) -> multipart::Form {
+fn add_optional_text<T: Display>(f: &mut Multipart, n: &'static str, v: Option<T>) {
     if let Some(v) = v {
-        f.text(n, v.to_string())
-    } else {
-        f
+        f.add_text(n, v.to_string());
     }
 }
 
@@ -235,41 +237,44 @@ impl<'a> Notification<'a> {
             }
         }
 
-        let form = multipart::Form::new()
-            .text("token", self.token.to_string())
-            .text("user", self.user.to_string())
-            .text("message", sanitize_message(&self.message));
+        let mut form = Multipart::new();
+        form.add_text("token", self.token.to_string());
+        form.add_text("user", self.user.to_string());
+        form.add_text("message", sanitize_message(&self.message));
 
-        let form = text_part(form, "device", self.device.as_ref());
-        let form = text_part(form, "title", self.title.as_ref());
-        let form = text_part(form, "html", self.html.as_ref());
-        let form = text_part(form, "monospace", self.monospace.as_ref());
-        let form = text_part(form, "timestamp", self.timestamp.as_ref());
-        let form = text_part(form, "priority", self.priority.as_ref());
-        let form = text_part(form, "url", self.url.as_ref());
-        let form = text_part(form, "url_title", self.url_title.as_ref());
-        let form = text_part(form, "sound", self.sound.as_ref());
+        add_optional_text(&mut form, "device", self.device.as_ref());
+        add_optional_text(&mut form, "title", self.title.as_ref());
+        add_optional_text(&mut form, "html", self.html.as_ref());
+        add_optional_text(&mut form, "monospace", self.monospace.as_ref());
+        add_optional_text(&mut form, "timestamp", self.timestamp.as_ref());
+        add_optional_text(&mut form, "priority", self.priority.as_ref());
+        add_optional_text(&mut form, "url", self.url.as_ref());
+        add_optional_text(&mut form, "url_title", self.url_title.as_ref());
+        add_optional_text(&mut form, "sound", self.sound.as_ref());
 
-        let form = if let Some(a) = self.attachment {
-            // TODO can we avoid clone of content Vec?
-            let part = multipart::Part::bytes(a.content.clone())
-                .file_name(a.filename.to_string())
-                .mime_str(&a.mime_type)?;
-            form.part("attachment", part)
-        } else {
-            form
-        };
+        if let Some(a) = self.attachment {
+            let reader = Cursor::new(&a.content);
+            form.add_stream(
+                "attachment",
+                reader,
+                Some(a.filename.clone()),
+                Some(a.mime.clone()),
+            );
+        }
 
         let uri = format!("{0}/1/messages.json", server_url());
-        let client = reqwest::Client::new();
-        let body = client
-            .post(&uri)
-            .multipart(form)
-            .send()
-            .await?
-            .text()
-            .await?;
-        match serde_json::from_str(&body) {
+        let form = form.prepare().map_err(|e| e.error)?;
+        let content_type = format!("multipart/form-data; boundary={}", form.boundary());
+        let response = ureq::post(&uri)
+            .set("Content-Type", &content_type)
+            .send(form)
+            .map_err(|e| NotificationError::UReq(Box::new(e)))?;
+        match serde_json::from_str(
+            response
+                .into_string()
+                .map_err(NotificationError::Io)?
+                .as_str(),
+        ) {
             Ok(r) => Ok(r),
             Err(e) => Err(NotificationError::Deserialize(e)),
         }
@@ -289,6 +294,7 @@ pub struct Response {
 
 #[cfg(test)]
 mod tests {
+    use mime::Mime;
     use std::str::FromStr;
 
     use mockito::mock;
@@ -437,7 +443,7 @@ mod tests {
             .create();
 
         let mut n = build_notification();
-        let a = Attachment::new("filename", "plain/text", &[]);
+        let a = Attachment::new("filename", Mime::from_str("plain/text").unwrap(), &[]);
         n.attachment = Some(&a);
 
         let res = n.send().await?;
@@ -464,7 +470,7 @@ mod tests {
 
         let a = Attachment::from_url(&u).await?;
         assert_eq!("filename.png", a.filename);
-        assert_eq!("image/png", a.mime_type);
+        assert_eq!("image/png", a.mime.to_string());
         assert_eq!(body.len(), a.content.len());
 
         let mut n = build_notification();
