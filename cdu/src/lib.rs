@@ -13,7 +13,7 @@
 //! Cloudflare DNS record update
 
 use std::borrow::Cow;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -25,20 +25,23 @@ use cloudflare::framework::response::ApiSuccess;
 use derivative::Derivative;
 use log::{debug, Level};
 use logging_timer::{finish, stimer};
-use thiserror::Error;
 use tokio::task::JoinHandle;
 use ttl_cache::TtlCache;
 use ureq::{Agent, AgentBuilder};
 
 const HTTP_TIMEOUT: u64 = 30;
 
-/// Recoverable errors from [`Cdu`]
-#[derive(Clone, Copy, Debug, Error)]
-pub enum RecoverableError {
-    /// Recoverable: Failed to determine IPv4 address
-    #[error("failed to determine IPv4 address")]
-    IpV4,
+/// Cannot determine public IPv4 address
+#[derive(Clone, Copy, Debug)]
+pub struct NoIPV4;
+
+impl Display for NoIPV4 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "cannot determine public IPv4 address")
+    }
 }
+
+impl std::error::Error for NoIPV4 {}
 
 #[derive(Eq, PartialEq, Hash)]
 enum CacheType {
@@ -129,7 +132,7 @@ impl<'a> Cdu<'a> {
     /// Perform DNS record update on Cloudflare
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let tmr = stimer!(Level::Debug; "FETCH_IP_ADDRESS");
-        let current_ip = public_ip::addr_v4().await.ok_or(RecoverableError::IpV4)?;
+        let current_ip = public_ip::addr_v4().await.ok_or(NoIPV4)?;
         finish!(tmr, "public IP address {:?}", &current_ip);
 
         if let Some(last_ip) = self.last_ip {

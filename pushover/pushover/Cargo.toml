@@ -10,7 +10,7 @@ authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 [dependencies]
 ammonia = "3"
 infer = "0.8"
-maplit = "1"
+maplit = "1" # for ammonia
 mime = "0.3"
 multipart = { version = "0.18", default-features = false, features = ["client"] }
 serde = { version = "1", features = ["derive"] }
