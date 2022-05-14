@@ -24,7 +24,7 @@ use env_logger::Env;
 use log::{debug, info, warn, Level};
 use logging_timer::{finish, timer};
 
-use cdu::{Cdu, RecoverableError};
+use cdu::{Cdu, NoIPV4};
 
 /// Argument parser
 #[derive(Debug, Parser)]
@@ -89,7 +89,7 @@ async fn run_once(cdu: &mut Cdu<'_>) -> anyhow::Result<()> {
             Ok(_) => break,
             Err(e) => {
                 if let Some(duration) = duration {
-                    if e.is::<ApiFailure>() || e.is::<RecoverableError>() {
+                    if e.is::<ApiFailure>() || e.is::<NoIPV4>() {
                         warn!("retry in {:?} because of {}", duration, e);
                         thread::sleep(duration);
                     } else {
