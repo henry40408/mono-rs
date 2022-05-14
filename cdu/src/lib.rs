@@ -99,10 +99,9 @@ impl<'a> Cdu<'a> {
             return Ok(id.clone());
         }
 
-        let url = "https://api.cloudflare.com/client/v4/zones";
         let value = format!("bearer {}", self.token);
         let req = agent
-            .get(&url)
+            .get("https://api.cloudflare.com/client/v4/zones")
             .set("accept", "application/json")
             .set("authorization", &value)
             .query("name", &self.zone);
