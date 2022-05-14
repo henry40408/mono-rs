@@ -2,7 +2,9 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::str::FromStr;
 
+use mime::Mime;
 use thiserror::Error;
 use url::Url;
 
@@ -12,9 +14,9 @@ pub enum AttachmentError {
     /// Error from [`std::io`]
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
-    /// Error from [`reqwest`] crate
-    #[error("reqwest error: {0}")]
-    Reqwest(#[from] reqwest::Error),
+    /// Error from [`ureq`] crate
+    #[error("ureq error: {0}")]
+    UReq(#[from] Box<ureq::Error>),
     /// Error from [`url`] crate
     #[error("attachment URL error: {0}")]
     Url(#[from] url::ParseError),
@@ -29,20 +31,20 @@ pub struct Attachment<'a> {
     /// Required. Filename
     pub(crate) filename: Cow<'a, str>,
     /// Required. MIME type, inferred when attached from URL
-    pub(crate) mime_type: Cow<'a, str>,
+    pub(crate) mime: Mime,
     /// Required. Attachment content
     pub(crate) content: Vec<u8>,
 }
 
 impl<'a> Attachment<'a> {
     /// Creates an [`Attachment`]
-    pub fn new<T>(filename: T, mime_type: T, content: &[u8]) -> Attachment<'a>
+    pub fn new<T>(filename: T, mime: Mime, content: &[u8]) -> Attachment<'a>
     where
         T: 'a + Into<Cow<'a, str>>,
     {
         Self {
             filename: filename.into(),
-            mime_type: mime_type.into(),
+            mime,
             content: content.to_vec(),
         }
     }
@@ -56,12 +58,9 @@ impl<'a> Attachment<'a> {
             .as_ref()
             .file_name()
             .map_or("filename", |t| t.to_str().map_or("filename", |t| t));
-        let mime_type = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
-        Ok(Self::new(
-            filename.to_owned(),
-            mime_type.mime_type().to_owned(),
-            &buffer,
-        ))
+        let inferred = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
+        let mime = Mime::from_str(inferred.mime_type()).map_err(|_e| AttachmentError::Infer)?;
+        Ok(Self::new(filename.to_owned(), mime, &buffer))
     }
 
     /// Creates an [`Attachment`] with URL string
@@ -70,24 +69,24 @@ impl<'a> Attachment<'a> {
         let filename = parsed
             .path_segments()
             .map_or("filename", |s| s.last().map_or("filename", |s| s));
-        let res = reqwest::get(parsed.as_str()).await?;
-        let res = match res.error_for_status() {
-            Ok(r) => r,
-            Err(e) => return Err(AttachmentError::Reqwest(e)),
-        };
-        let buffer = res.bytes().await?.to_vec();
-        let mime_type = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
-        Ok(Self::new(
-            filename.to_owned(),
-            mime_type.mime_type().to_owned(),
-            &buffer,
-        ))
+        let res = ureq::get(parsed.as_str())
+            .call()
+            .map_err(|e| AttachmentError::UReq(Box::new(e)))?;
+
+        let mut buffer = Vec::new();
+        res.into_reader().read_to_end(&mut buffer)?;
+
+        let inferred = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
+        let mime = Mime::from_str(inferred.mime_type()).map_err(|_e| AttachmentError::Infer)?;
+        Ok(Self::new(filename.to_owned(), mime, &buffer))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use mime::Mime;
     use mockito::mock;
+    use std::str::FromStr;
     use url::Url;
 
     use crate::server_url;
@@ -95,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_attachment_new() {
-        Attachment::new("filename", "plain/text", &[]);
+        Attachment::new("filename", Mime::from_str("plain/text").unwrap(), &[]);
     }
 
     #[tokio::test]
@@ -131,7 +130,7 @@ mod tests {
         let u = format!("{}/filename.png", server_url());
         let a = Attachment::from_url(u).await?;
         assert_eq!("filename.png", a.filename);
-        assert_eq!("image/png", a.mime_type);
+        assert_eq!("image/png", a.mime.to_string());
         assert_eq!(body.len(), a.content.len());
         Ok(())
     }
