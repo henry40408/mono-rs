@@ -105,7 +105,8 @@ mod tests {
             .with_body(body)
             .create();
 
-        let url = format!("{}/image.png", &mockito::server_url());
+        let host = server_url();
+        let url = format!("{host}/image.png");
 
         // accepts &str
         let attachment = Attachment::from_url(&url).await?;
@@ -127,7 +128,8 @@ mod tests {
             .with_body(&body)
             .create();
 
-        let u = format!("{}/filename.png", server_url());
+        let host = server_url();
+        let u = format!("{host}/filename.png");
         let a = Attachment::from_url(u).await?;
         assert_eq!("filename.png", a.filename);
         assert_eq!("image/png", a.mime.to_string());

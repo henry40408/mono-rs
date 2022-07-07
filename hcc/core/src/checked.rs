@@ -110,25 +110,27 @@ impl<'a> Checked<'a> {
     /// result.sentence();
     /// ```
     pub fn sentence(&self) -> String {
+        let domain_name = &self.domain_name;
         match self.state {
             CertificateState::NotChecked => {
-                format!("certificate state of {} is unknown", self.domain_name)
+                let domain_name = &self.domain_name;
+                format!("certificate state of {domain_name} is unknown")
             }
-            CertificateState::Ok { days, not_after } => format!(
-                "certificate of {} expires in {} days ({})",
-                self.domain_name,
-                days.to_formatted_string(&Locale::en),
-                Utc.timestamp(not_after, 0).to_rfc3339()
-            ),
-            CertificateState::Warning { days, not_after } => format!(
-                "certificate of {} expires in {} days ({})",
-                self.domain_name,
-                days.to_formatted_string(&Locale::en),
-                Utc.timestamp(not_after, 0).to_rfc3339()
-            ),
-            CertificateState::Expired => format!("certificate of {} has expired", self.domain_name),
+            CertificateState::Ok { days, not_after } => {
+                let domain_name = &self.domain_name;
+                let days = days.to_formatted_string(&Locale::en);
+                let r = Utc.timestamp(not_after, 0).to_rfc3339();
+                format!("certificate of {domain_name} expires in {days} days ({r})")
+            }
+            CertificateState::Warning { days, not_after } => {
+                let domain_name = &self.domain_name;
+                let days = days.to_formatted_string(&Locale::en);
+                let r = Utc.timestamp(not_after, 0).to_rfc3339();
+                format!("certificate of {domain_name} expires in {days} days ({r})")
+            }
+            CertificateState::Expired => format!("certificate of {domain_name} has expired"),
             CertificateState::Error(ref e) => {
-                format!("failed to check {}: {}", self.domain_name, e)
+                format!("failed to check {domain_name}: {e}")
             }
         }
     }
@@ -186,10 +188,10 @@ impl<'a> fmt::Display for Checked<'a> {
         s.push_str(&self.sentence());
 
         if let Some(elapsed) = self.elapsed {
-            s.push_str(&format!(", {0}ms elapsed", elapsed));
+            s.push_str(&format!(", {elapsed}ms elapsed"));
         }
 
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -221,12 +223,10 @@ mod test {
             not_after: not_after.timestamp(),
         };
 
-        let left = format!("{}", result);
-        let right = format!(
-            "\u{2705} certificate of example.com expires in {} days ({})",
-            days,
-            not_after.to_rfc3339()
-        );
+        let left = format!("{result}");
+
+        let r = not_after.to_rfc3339();
+        let right = format!("\u{2705} certificate of example.com expires in {days} days ({r})",);
         assert_eq!(left, right);
     }
 
@@ -240,21 +240,19 @@ mod test {
             days,
             not_after: not_after.timestamp(),
         };
-        let left = format!("{}", result);
-        let right = format!(
-            "\u{26a0}\u{fe0f} certificate of example.com expires in {} days ({})",
-            days,
-            not_after.to_rfc3339()
-        );
-        assert_eq!(left, right);
+        let left = format!("{result}");
+
+        let r = not_after.to_rfc3339();
+        let r = format!("\u{26a0}\u{fe0f} certificate of example.com expires in {days} days ({r})");
+        assert_eq!(left, r);
     }
 
     #[test]
     fn test_display_expired() {
         let mut result = build_checked();
         result.state = CertificateState::Expired;
-        let left = format!("{}", result);
-        let right = format!("\u{274c} certificate of example.com has expired");
+        let left = format!("{result}");
+        let right = "\u{274c} certificate of example.com has expired";
         assert_eq!(left, right);
     }
 }

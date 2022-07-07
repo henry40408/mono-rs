@@ -82,7 +82,9 @@ impl Checker {
             Ok(c) => c,
             Err(e) => return Checked::error(domain_name, e),
         };
-        let mut stream = match TcpStream::connect(format!("{0}:443", domain_name.as_ref())) {
+
+        let domain_ref = domain_name.as_ref();
+        let mut stream = match TcpStream::connect(format!("{domain_ref}:443")) {
             Ok(s) => s,
             Err(e) => return Checked::error(domain_name, e),
         };
@@ -158,15 +160,13 @@ impl Checker {
     where
         T: AsRef<str>,
     {
+        let domain_ref = domain_name.as_ref();
         format!(
-            concat!(
-                "GET / HTTP/1.1\r\n",
-                "Host: {0}\r\n",
-                "Connection: close\r\n",
-                "Accept-Encoding: identity\r\n",
-                "\r\n"
-            ),
-            domain_name.as_ref()
+            "GET / HTTP/1.1\r\n\
+            Host: {domain_ref}\r\n\
+            Connection: close\r\n\
+            Accept-Encoding: identity\r\n\
+            \r\n"
         )
     }
 }
@@ -210,11 +210,11 @@ mod test {
         let results = client.check_many(domain_names.as_slice()).await;
         assert_eq!(2, results.len());
 
-        let result = results.get(0).unwrap();
+        let result = &results[0];
         dbg!(&result);
         assert!(matches!(result.state, CertificateState::Ok { .. }));
 
-        let result = results.get(1).unwrap();
+        let result = &results[1];
         assert!(matches!(result.state, CertificateState::Expired));
 
         Ok(())

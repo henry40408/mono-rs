@@ -1,9 +1,10 @@
 [package]
 name = "cdu"
-version = "1.1.7"
+version = "1.1.8"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2021"
 description = "Cloudflare DNS record update"
+rust-version = "1.58"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

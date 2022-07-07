@@ -262,9 +262,11 @@ impl<'a> Notification<'a> {
             );
         }
 
-        let uri = format!("{0}/1/messages.json", server_url());
+        let host = server_url();
+        let uri = format!("{host}/1/messages.json");
         let form = form.prepare().map_err(|e| e.error)?;
-        let content_type = format!("multipart/form-data; boundary={}", form.boundary());
+        let boundary = form.boundary();
+        let content_type = format!("multipart/form-data; boundary={boundary}");
         let response = ureq::post(&uri)
             .set("Content-Type", &content_type)
             .send(form)
@@ -466,7 +468,8 @@ mod tests {
             .with_body(body)
             .create();
 
-        let u = format!("{}/filename.png", server_url());
+        let host = server_url();
+        let u = format!("{host}/filename.png");
 
         let a = Attachment::from_url(&u).await?;
         assert_eq!("filename.png", a.filename);

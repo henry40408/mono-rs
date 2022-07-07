@@ -102,7 +102,8 @@ impl<'a> Cdu<'a> {
             return Ok(id.clone());
         }
 
-        let value = format!("bearer {}", self.token);
+        let token = &self.token;
+        let value = format!("bearer {token}");
         let req = agent
             .get("https://api.cloudflare.com/client/v4/zones")
             .set("accept", "application/json")
@@ -155,7 +156,8 @@ impl<'a> Cdu<'a> {
             let zone_id = zone_id.clone();
             let cache = self.cache.clone();
             let cache_ttl = self.cache_ttl();
-            let authorization = format!("bearer {}", self.token);
+            let token = &self.token;
+            let authorization = format!("bearer {token}");
             tasks.push(tokio::spawn(async move {
                 if let Some(id) = cache
                     .lock()
@@ -201,7 +203,8 @@ impl<'a> Cdu<'a> {
         for (dns_record_id, record_name) in dns_record_ids {
             let agent = agent.clone();
             let zone_id = zone_id.clone();
-            let authorization = format!("bearer {}", self.token);
+            let token = &self.token;
+            let authorization = format!("bearer {token}");
             tasks.push(tokio::spawn(async move {
                 let url = format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{dns_record_id}");
                 let req = agent.put(&url).set("authorization", &authorization);
