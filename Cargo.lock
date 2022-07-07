@@ -184,7 +184,7 @@ checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
 
 [[package]]
 name = "cdu"
-version = "1.1.7"
+version = "1.1.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -660,7 +660,7 @@ checksum = "db0d4cf898abf0081f964436dc980e96670a0f36863e4b83aaacdb65c9d7ccc3"
 
 [[package]]
 name = "hcc"
-version = "3.0.3"
+version = "3.0.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -676,7 +676,7 @@ dependencies = [
 
 [[package]]
 name = "hcc-pushover"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1329,7 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "pushover"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "ammonia",
  "infer",

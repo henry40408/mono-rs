@@ -83,13 +83,13 @@ async fn check_domain_names(opts: &Opts, domain_names: &[&str]) -> anyhow::Resul
     let mut tasks = vec![];
     for (index, result) in results.iter().enumerate() {
         let r = Arc::new(result);
-        let domain_name = domain_names.get(index).unwrap().to_string();
+        let domain_name = domain_names[index].to_string();
         tasks.push(async move {
-            let title = format!("HTTP Certificate Check - {}", domain_name);
+            let title = format!("HTTP Certificate Check - {domain_name}");
 
             let state_icon = r.state_icon();
             let sentence = r.sentence();
-            let message = format!("{} {}", state_icon, sentence);
+            let message = format!("{state_icon} {sentence}");
 
             let mut n = Notification::new(&opts.pushover_token, &opts.pushover_user, &message);
             n.title = Some(&title);
