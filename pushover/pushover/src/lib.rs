@@ -184,13 +184,24 @@ fn server_url() -> String {
     "https://api.pushover.net".to_string()
 }
 
-/// Sanitize message in [`Notification`].
-///
-/// ```rust
-/// # use pushover::sanitize_message;
-/// let m = sanitize_message(r#"<b>Rust</b>"#);
-/// assert_eq!(r#"<b>Rust</b>"#, m);
+/// Shorthand function to send notification to Pushover.
 /// ```
+/// use pushover::send_notification;
+/// send_notification("token", "user", "message");
+/// send_notification("token", "group", "message");
+/// ```
+pub async fn send_notification<'a, S>(
+    token: S,
+    identifier: S,
+    message: S,
+) -> Result<Response, NotificationError>
+where
+    S: Into<Cow<'a, str>>,
+{
+    Notification::new(token, identifier, message).send().await
+}
+
+#[doc(hidden)]
 pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
     let tags = hashset!["b", "i", "u", "font", "a"];
     let tag_attrs = hashmap![
@@ -307,8 +318,8 @@ mod tests {
 
     use crate::attachment::Attachment;
     use crate::{
-        sanitize_message, server_url, Monospace, Notification, NotificationError, Priority, Sound,
-        HTML,
+        sanitize_message, send_notification, server_url, Monospace, Notification,
+        NotificationError, Priority, Sound, HTML,
     };
 
     #[test]
@@ -511,5 +522,19 @@ mod tests {
 
         let s = "<script>alert('XSS');</script>";
         assert_eq!("", sanitize_message(s));
+    }
+
+    #[tokio::test]
+    async fn test_sned_message() -> Result<(), NotificationError> {
+        let _m = mock("POST", "/1/messages.json")
+            .with_status(200)
+            .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
+            .create();
+
+        let res = send_notification("token", "user", "message").await?;
+        assert_eq!(1, res.status);
+        assert_eq!("00000000-0000-0000-0000-000000000000", res.request);
+        assert!(res.errors.is_none());
+        Ok(())
     }
 }
