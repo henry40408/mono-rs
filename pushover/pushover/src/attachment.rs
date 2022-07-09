@@ -8,36 +8,36 @@ use mime::Mime;
 use thiserror::Error;
 use url::Url;
 
-/// Attachment error
+/// Attachment error.
 #[derive(Error, Debug)]
 pub enum AttachmentError {
-    /// Error from [`std::io`]
+    /// Error from [`std::io`].
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
-    /// Error from [`ureq`] crate
+    /// Error from [`ureq`] crate.
     #[error("ureq error: {0}")]
     UReq(#[from] Box<ureq::Error>),
-    /// Error from [`url`] crate
+    /// Error from [`url`] crate.
     #[error("attachment URL error: {0}")]
     Url(#[from] url::ParseError),
-    /// Failed to infer MIME type, no extra information
+    /// Failed to infer MIME type, no extra information.
     #[error("unknown MIME type")]
     Infer,
 }
 
-/// Notification attachment. Image in most cases
+/// Notification attachment. Image in most cases.
 #[derive(Debug)]
 pub struct Attachment<'a> {
-    /// Required. Filename
+    /// Filename.
     pub(crate) filename: Cow<'a, str>,
-    /// Required. MIME type, inferred when attached from URL
+    /// MIME type, inferred when attached from URL.
     pub(crate) mime: Mime,
-    /// Required. Attachment content
+    /// Attachment content.
     pub(crate) content: Vec<u8>,
 }
 
 impl<'a> Attachment<'a> {
-    /// Creates an [`Attachment`]
+    /// Creates an [`Attachment`].
     pub fn new<T>(filename: T, mime: Mime, content: &[u8]) -> Attachment<'a>
     where
         T: 'a + Into<Cow<'a, str>>,
@@ -49,7 +49,7 @@ impl<'a> Attachment<'a> {
         }
     }
 
-    /// Creates an [`Attachment`] with path
+    /// Creates an [`Attachment`] from path.
     pub async fn from_path<T: AsRef<Path>>(path: T) -> Result<Attachment<'a>, AttachmentError> {
         let mut buffer = Vec::new();
         let mut handle = File::open(path.as_ref())?;
@@ -63,7 +63,7 @@ impl<'a> Attachment<'a> {
         Ok(Self::new(filename.to_owned(), mime, &buffer))
     }
 
-    /// Creates an [`Attachment`] with URL string
+    /// Creates an [`Attachment`] from URL.
     pub async fn from_url<T: AsRef<str>>(url: T) -> Result<Attachment<'a>, AttachmentError> {
         let parsed = Url::parse(url.as_ref())?;
         let filename = parsed
