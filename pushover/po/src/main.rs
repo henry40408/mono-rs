@@ -10,7 +10,27 @@
     unused_qualifications
 )]
 
-//! po is a command line application based on Pushover API
+//! po is a command line application based on Pushover API.
+//!
+//! If Pushover API token / key is "token" and user key is "user",
+//!
+//! ```
+//! $ po -t token -u user -m message
+//! ```
+//!
+//! Or you can set environment variables instead,
+//!
+//! ```
+//! $ export PUSHOVER_TOKEN=token
+//! $ export PUSHOVER_USER=user
+//! $ po -m message
+//! ```
+//!
+//! For more information,
+//!
+//! ```
+//! $ po -h
+//! ```
 
 use anyhow::bail;
 use std::path::PathBuf;
@@ -23,19 +43,20 @@ use logging_timer::{finish, stimer};
 
 use pushover::{Attachment, Monospace, Notification, Priority, Sound, HTML};
 
+#[doc(hidden)]
 #[derive(Parser)]
 #[clap(about, author, version)]
 struct Opts {
-    /// Your application's API token <https://pushover.net/api#identifiers>
+    /// Your application's API token. <https://pushover.net/api#identifiers>
     #[clap(short, long, env = "PUSHOVER_TOKEN")]
     token: String,
-    /// The user / group key (not e-mail address) of your user (or you) <https://pushover.net/api#identifiers>
+    /// The user / group key (not e-mail address) of your user (or you). <https://pushover.net/api#identifiers>
     #[clap(short, long, env = "PUSHOVER_USER")]
     user: String,
-    /// Your message <https://pushover.net/api#messages>
+    /// Your message. <https://pushover.net/api#messages>
     #[clap(short, long)]
     message: String,
-    /// Verbose
+    /// Verbose.
     #[clap(short, long)]
     verbose: bool,
     /// To enable HTML formatting. monospace may not be used if html is used, and vice versa. <https://pushover.net/api#html>
@@ -44,32 +65,33 @@ struct Opts {
     /// To enable monospace messages. monospace may not be used if html is used, and vice versa. <https://pushover.net/api#html>
     #[clap(long)]
     monospace: bool,
-    /// Your user's device name to send the message directly to that device, rather than all of the user's devices <https://pushover.net/api#identifiers>
+    /// Your user's device name to send the message directly to that device, rather than all of the user's devices. <https://pushover.net/api#identifiers>
     #[clap(long)]
     device: Option<String>,
-    /// Your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
+    /// Your message's title, otherwise your app's name is used. <https://pushover.net/api#messages>
     #[clap(long)]
     title: Option<String>,
-    /// A Unix timestamp of your message's date and time to display to the user, rather than the time your message is received by our API <https://pushover.net/api#timestamp>
+    /// A Unix timestamp of your message's date and time to display to the user, rather than the time your message is received by our API. <https://pushover.net/api#timestamp>
     #[clap(long)]
     timestamp: Option<u64>,
-    /// Attach file as notification attachment
+    /// Attach file as notification attachment.
     #[clap(short, long)]
     file: Option<PathBuf>,
-    /// Messages may be sent with a different priority that affects how the message is presented to the user e.g. -2, -1, 0, 1, 2 <https://pushover.net/api#priority>
+    /// Messages may be sent with a different priority that affects how the message is presented to the user e.g. -2, -1, 0, 1, 2. <https://pushover.net/api#priority>
     #[clap(long)]
     priority: Option<String>,
-    /// Users can choose from a number of different default sounds to play when receiving notifications <https://pushover.net/api#sounds>
+    /// Users can choose from a number of different default sounds to play when receiving notifications. <https://pushover.net/api#sounds>
     #[clap(long)]
     sound: Option<String>,
-    /// A supplementary URL to show with your message <https://pushover.net/api#urls>
+    /// A supplementary URL to show with your message. <https://pushover.net/api#urls>
     #[clap(long)]
     url: Option<String>,
-    /// A title for your supplementary URL, otherwise just the URL is shown <https://pushover.net/api#urls>
+    /// A title for your supplementary URL, otherwise just the URL is shown. <https://pushover.net/api#urls>
     #[clap(long)]
     url_title: Option<String>,
 }
 
+#[doc(hidden)]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
