@@ -10,12 +10,12 @@
     unused_qualifications
 )]
 
-//! Cloudflare DNS record update
+//! Cloudflare DNS record update.
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::net::Ipv4Addr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::bail;
@@ -25,13 +25,14 @@ use cloudflare::framework::response::ApiSuccess;
 use derivative::Derivative;
 use log::{debug, Level};
 use logging_timer::{finish, stimer};
+use moka::sync::Cache;
 use tokio::task::JoinHandle;
-use ttl_cache::TtlCache;
 use ureq::{Agent, AgentBuilder};
 
+const API_HOST: &'static str = "https://api.cloudflare.com";
 const HTTP_TIMEOUT: u64 = 30;
 
-/// Cannot determine public IPv4 address
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub struct NoIPV4;
 
@@ -44,25 +45,33 @@ impl Display for NoIPV4 {
 impl std::error::Error for NoIPV4 {}
 
 #[derive(Eq, PartialEq, Hash)]
-enum CacheType {
-    Zone,
-    Record,
+enum CacheKey {
+    LastIP,
+}
+
+#[derive(Clone)]
+enum Cached {
+    IP(Ipv4Addr),
+}
+
+impl Display for Cached {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Cached::IP(i) => write!(f, "{i}"),
+        }
+    }
 }
 
 /// Cloudflare DNS Update
+#[doc(hidden)]
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Cdu<'a> {
     token: Cow<'a, str>,
-    /// DNS zone
-    pub zone: Cow<'a, str>,
+    zone: Cow<'a, str>,
     record_names: Vec<String>,
     #[derivative(Debug = "ignore")]
-    cache: Arc<Mutex<TtlCache<(CacheType, String), String>>>,
-    /// Cache latest IP address for how many seconds
-    pub cache_seconds: Option<u64>,
-    /// Last IP address fetched
-    pub last_ip: Option<Ipv4Addr>,
+    cache: Cache<CacheKey, Cached>,
 }
 
 impl<'a> Cdu<'a> {
@@ -72,7 +81,6 @@ impl<'a> Cdu<'a> {
         T: Into<Cow<'a, str>>,
         U: Display,
     {
-        let capacity = record_names.len();
         Self {
             token: token.into(),
             zone: zone.into(),
@@ -80,47 +88,25 @@ impl<'a> Cdu<'a> {
                 .iter()
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>(),
-            // zone identifier and record identifiers
-            cache: Arc::new(Mutex::new(TtlCache::new(capacity + 1))),
-            cache_seconds: None,
-            last_ip: None,
+            cache: Cache::new(1), // cache IP address
         }
-    }
-
-    pub(crate) fn cache_ttl(&self) -> Option<Duration> {
-        self.cache_seconds.map(Duration::from_secs)
     }
 
     async fn get_zone_identifier(&self, agent: Arc<Agent>) -> anyhow::Result<String> {
-        if let Some(id) = self
-            .cache
-            .lock()
-            .unwrap()
-            .get(&(CacheType::Zone, self.zone.to_string()))
-        {
-            debug!("zone found in cache: {} ({})", &self.zone, &id);
-            return Ok(id.clone());
-        }
-
+        let zone = &self.zone;
         let token = &self.token;
-        let value = format!("bearer {token}");
         let req = agent
-            .get("https://api.cloudflare.com/client/v4/zones")
+            .get(&format!("{API_HOST}/client/v4/zones"))
             .set("accept", "application/json")
-            .set("authorization", &value)
+            .set("authorization", &format!("bearer {token}"))
             .query("name", &self.zone);
-
-        let tmr = stimer!(Level::Debug; "FETCH_ZONE", "zone {}", self.zone);
+        let tmr = stimer!(Level::Debug; "FETCH_ZONE", "zone {zone}");
         let res: ApiSuccess<Vec<Zone>> = req.call()?.into_json()?;
         let id = match res.result.first() {
             Some(zone) => zone.id.to_string(),
-            None => bail!("zone not found: {}", self.zone),
+            None => bail!("zone not found: {zone}"),
         };
-        if let Some(ttl) = self.cache_ttl() {
-            let mut cache = self.cache.lock().unwrap();
-            cache.insert((CacheType::Zone, self.zone.to_string()), id.clone(), ttl);
-        }
-        finish!(tmr, "zone ID {}", &id);
+        finish!(tmr, "zone ID {id}");
         Ok(id)
     }
 
@@ -131,17 +117,17 @@ impl<'a> Cdu<'a> {
     }
 
     /// Perform DNS record update on Cloudflare
-    pub async fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&self) -> anyhow::Result<()> {
         let tmr = stimer!(Level::Debug; "FETCH_IP_ADDRESS");
         let current_ip = public_ip::addr_v4().await.ok_or(NoIPV4)?;
-        finish!(tmr, "public IP address {:?}", &current_ip);
+        finish!(tmr, "public IP address {current_ip:?}");
 
-        if let Some(last_ip) = self.last_ip {
+        if let Some(Cached::IP(last_ip)) = self.cache.get(&CacheKey::LastIP) {
             if current_ip == last_ip {
                 debug!("IPv4 address remains unchanged, skip");
                 return Ok(());
             }
-            debug!("IPv4 address changed from {} to {}", last_ip, current_ip);
+            debug!("IPv4 address changed from {last_ip} to {current_ip}");
         } else {
             debug!("no previous IPv4 address found, continue");
         }
@@ -154,41 +140,22 @@ impl<'a> Cdu<'a> {
             let agent = agent.clone();
             let record_name = record_name.clone();
             let zone_id = zone_id.clone();
-            let cache = self.cache.clone();
-            let cache_ttl = self.cache_ttl();
             let token = &self.token;
             let authorization = format!("bearer {token}");
             tasks.push(tokio::spawn(async move {
-                if let Some(id) = cache
-                    .lock()
-                    .unwrap()
-                    .get(&(CacheType::Record, record_name.clone()))
-                {
-                    debug!("record found in cache: {} ({})", &record_name, &id);
-                    return Ok((id.clone(), record_name));
-                }
-
-                let url =
-                    format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records");
+                let url = format!("{API_HOST}/client/v4/zones/{zone_id}/dns_records");
                 let req = agent
                     .get(&url)
                     .query("name", &record_name)
                     .set("content-type", "application/json")
                     .set("authorization", &authorization);
-                let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORD", "DNS record {}", &record_name);
+                let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORD", "DNS record {record_name}");
                 let res: ApiSuccess<Vec<DnsRecord>> = req.call()?.into_json()?;
                 let id = match res.result.first() {
                     Some(dns_record) => dns_record.id.clone(),
-                    None => bail!("DNS record not found: {}", record_name),
+                    None => bail!("DNS record not found: {record_name}"),
                 };
-                if let Some(ttl) = cache_ttl {
-                    cache.lock().unwrap().insert(
-                        (CacheType::Record, record_name.clone()),
-                        id.clone(),
-                        ttl,
-                    );
-                }
-                finish!(tmr, "DNS record ID {}", &id);
+                finish!(tmr, "DNS record ID {id}");
                 Ok((id, record_name))
             }));
         }
@@ -206,14 +173,14 @@ impl<'a> Cdu<'a> {
             let token = &self.token;
             let authorization = format!("bearer {token}");
             tasks.push(tokio::spawn(async move {
-                let url = format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{dns_record_id}");
+                let url = format!("{API_HOST}/client/v4/zones/{zone_id}/dns_records/{dns_record_id}");
                 let req = agent.put(&url).set("authorization", &authorization);
-                let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORD", "DNS record {} ({})", &record_name, &dns_record_id);
+                let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORD", "DNS record {record_name} ({dns_record_id})");
                 let res:ApiSuccess<DnsRecord> = req.send_json(ureq::json!({
-                    "type":"A",
+                    "type": "A",
                     "name": &record_name,
                     "content": current_ip,
-                    "ttl":1 // 1 for automatic
+                    "ttl": 1 // 1 for automatic
                 }))?.into_json()?;
                 let content = match res.result.content {
                     DnsContent::A { content } => content.to_string(),
@@ -224,14 +191,15 @@ impl<'a> Cdu<'a> {
             }));
         }
 
-        let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORDS", "update {} DNS records", tasks.len());
+        let len = tasks.len();
+        let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORDS", "update {len} DNS records");
         for task in futures::future::join_all(tasks).await {
             task??;
         }
         finish!(tmr);
 
         // save current IP address when update succeeds
-        self.last_ip = Some(current_ip);
+        self.cache.insert(CacheKey::LastIP, Cached::IP(current_ip));
 
         Ok(())
     }
