@@ -1,3 +1,19 @@
+#![deny(
+    missing_docs,
+    missing_debug_implementations,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unstable_features,
+    unused_import_braces,
+    unused_qualifications
+)]
+
+//! Placeholder in container images waiting for SIGTERM or SIGINT.
+//!
+//! Windows is **NOT SUPPORTED**.
+
 use env_logger::Env;
 #[cfg(target_os = "windows")]
 use log::error;
@@ -12,6 +28,7 @@ fn main() {
     error!("windows is NOT supported");
 }
 
+#[doc(hidden)]
 #[cfg(not(target_os = "windows"))]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

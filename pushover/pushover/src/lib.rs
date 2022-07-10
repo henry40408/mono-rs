@@ -10,7 +10,7 @@
     unused_qualifications
 )]
 
-//! Pushover is Pushover API wrapper with attachment support in Rust 2021 edition
+//! Pushover is Pushover API wrapper with attachment support in Rust 2021 edition.
 
 use maplit::{hashmap, hashset};
 use multipart::client::lazy::Multipart;
@@ -24,61 +24,61 @@ pub use attachment::{Attachment, AttachmentError};
 
 mod attachment;
 
-/// Notification error
+/// Notification error.
 #[derive(Error, Debug)]
 pub enum NotificationError {
-    /// Error from [`ureq`] crate
+    /// Error from [`ureq`] crate.
     #[error("ureq error: {0}")]
     UReq(#[from] Box<ureq::Error>),
-    /// Error from [`serde_json`] crate
+    /// Error from [`serde_json`] crate.
     #[error("deserialization error: {0}")]
     Deserialize(#[from] serde_json::Error),
-    /// Wrapped [`crate::AttachmentError`]
+    /// Wrapped [`crate::AttachmentError`].
     #[error("attachment error: {0}")]
     Attachment(#[from] AttachmentError),
-    /// HTML and monospace are mutually exclusive <https://pushover.net/api#html>
+    /// HTML and monospace are mutually exclusive. <https://pushover.net/api#html>
     #[error("html and monospace are mutually exclusive")]
     HTMLMonospace,
-    /// IO error
+    /// IO error.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
 
-/// Pushover API parameters <https://pushover.net/api#messages> and attachment
+/// Pushover API parameters <https://pushover.net/api#messages> and attachment.
 #[derive(Default, Debug)]
 pub struct Notification<'a> {
     token: Cow<'a, str>,
-    user: Cow<'a, str>,
+    identifier: Cow<'a, str>,
     message: Cow<'a, str>,
     /// Your user's device name to send the message directly to that device,
-    /// rather than all of the user's devices (multiple devices may be separated by a comma)
+    /// rather than all of the user's devices (multiple devices may be separated by a comma).
     /// <https://pushover.net/api#identifiers>
     pub device: Option<&'a str>,
-    /// Your message's title, otherwise your app's name is used <https://pushover.net/api#messages>
+    /// Your message's title, otherwise your app's name is used. <https://pushover.net/api#messages>
     pub title: Option<&'a str>,
-    /// To enable HTML formatting <https://pushover.net/api#html>
+    /// To enable HTML formatting. <https://pushover.net/api#html>
     pub html: Option<HTML>,
-    /// To enable monospace messages <https://pushover.net/api#html>
+    /// To enable monospace messages. <https://pushover.net/api#html>
     pub monospace: Option<Monospace>,
     /// Messages are stored on the Pushover servers with a timestamp of
-    /// when they were initially received through the API <https://pushover.net/api#html>
+    /// when they were initially received through the API. <https://pushover.net/api#html>
     pub timestamp: Option<u64>,
     /// Messages may be sent with a different priority that affects
-    /// how the message is presented to the user <https://pushover.net/api#priority>
+    /// how the message is presented to the user. <https://pushover.net/api#priority>
     pub priority: Option<Priority>,
-    /// A supplementary URL to show with your message <https://pushover.net/api#urls>
+    /// A supplementary URL to show with your message. <https://pushover.net/api#urls>
     pub url: Option<&'a str>,
     /// A title for your supplementary URL,
-    /// otherwise just the URL is shown <https://pushover.net/api#urls>
+    /// otherwise just the URL is shown. <https://pushover.net/api#urls>
     pub url_title: Option<&'a str>,
     /// Users can choose from a number of different default sounds
-    /// to play when receiving notifications <https://pushover.net/api#sounds>
+    /// to play when receiving notifications. <https://pushover.net/api#sounds>
     pub sound: Option<Sound>,
-    /// Attachment. Image in most cases
+    /// Optional [`Attachment`].
     pub attachment: Option<&'a Attachment<'a>>,
 }
 
-/// To enable HTML formatting <https://pushover.net/api#html>
+/// To enable HTML formatting. <https://pushover.net/api#html>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum HTML {
     /// Plain text (default)
@@ -89,7 +89,7 @@ pub enum HTML {
     HTML,
 }
 
-/// To enable monospace messages <https://pushover.net/api#html>
+/// To enable monospace messages. <https://pushover.net/api#html>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Monospace {
     /// Normal (default)
@@ -101,7 +101,7 @@ pub enum Monospace {
 }
 
 /// Messages may be sent with a different priority
-/// that affects how the message is presented to the user <https://pushover.net/api#priority>
+/// that affects how the message is presented to the user. <https://pushover.net/api#priority>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Priority {
     /// Normal (default)
@@ -122,7 +122,7 @@ pub enum Priority {
 }
 
 /// Users can choose from a number of different default sounds
-/// to play when receiving notifications <https://pushover.net/api#sounds>
+/// to play when receiving notifications. <https://pushover.net/api#sounds>
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum Sound {
@@ -184,13 +184,24 @@ fn server_url() -> String {
     "https://api.pushover.net".to_string()
 }
 
-/// Sanitize message in [`Notification`]
-///
-/// ```rust
-/// # use pushover::sanitize_message;
-/// let m = sanitize_message(r#"<b>Rust</b>"#);
-/// assert_eq!(r#"<b>Rust</b>"#, m);
+/// Shorthand function to send notification to Pushover.
 /// ```
+/// use pushover::send_notification;
+/// send_notification("token", "user", "message");
+/// send_notification("token", "group", "message");
+/// ```
+pub async fn send_notification<'a, S>(
+    token: S,
+    identifier: S,
+    message: S,
+) -> Result<Response, NotificationError>
+where
+    S: Into<Cow<'a, str>>,
+{
+    Notification::new(token, identifier, message).send().await
+}
+
+#[doc(hidden)]
 pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
     let tags = hashset!["b", "i", "u", "font", "a"];
     let tag_attrs = hashmap![
@@ -212,34 +223,43 @@ fn add_optional_text<T: Display>(f: &mut Multipart, n: &'static str, v: Option<T
 }
 
 impl<'a> Notification<'a> {
-    /// Creates a [`Notification`]
+    /// Creates a [`Notification`].
+    ///
+    /// Once you have an API token, you'll need the user key and optional device name
+    /// for each user to which you are pushing notifications. Instead of a user key,
+    /// a group key may be supplied. Group keys look identical to user keys and from
+    /// your application's perspective, you do not need to distinguish between them.
+    ///
     /// ```rust
     /// # use pushover::Notification;
+    /// // Notify user
     /// Notification::new("token", "user", "message");
+    /// // Notify group of users
+    /// Notification::new("token", "group", "message");
     /// ```
-    pub fn new<T>(token: T, user: T, message: T) -> Self
+    pub fn new<T>(token: T, identifier: T, message: T) -> Self
     where
         T: Into<Cow<'a, str>>,
     {
         Self {
             token: token.into(),
-            user: user.into(),
+            identifier: identifier.into(),
             message: message.into(),
             ..Default::default()
         }
     }
 
-    /// Send [`Notification`] to Pushover API
+    /// Send [`Notification`] to Pushover.
     pub async fn send(&self) -> Result<Response, NotificationError> {
-        if let Some(HTML::HTML) = self.html {
-            if let Some(Monospace::Monospace) = self.monospace {
-                return Err(NotificationError::HTMLMonospace);
-            }
+        // HTML and monospace are mutually exclusive <https://pushover.net/api#html>
+        if self.html == Some(HTML::HTML) && self.monospace == Some(Monospace::Monospace) {
+            return Err(NotificationError::HTMLMonospace);
         }
 
         let mut form = Multipart::new();
+
         form.add_text("token", self.token.to_string());
-        form.add_text("user", self.user.to_string());
+        form.add_text("user", self.identifier.to_string()); // User or group key
         form.add_text("message", sanitize_message(&self.message));
 
         add_optional_text(&mut form, "device", self.device.as_ref());
@@ -264,6 +284,7 @@ impl<'a> Notification<'a> {
 
         let host = server_url();
         let uri = format!("{host}/1/messages.json");
+
         let form = form.prepare().map_err(|e| e.error)?;
         let boundary = form.boundary();
         let content_type = format!("multipart/form-data; boundary={boundary}");
@@ -271,26 +292,20 @@ impl<'a> Notification<'a> {
             .set("Content-Type", &content_type)
             .send(form)
             .map_err(|e| NotificationError::UReq(Box::new(e)))?;
-        match serde_json::from_str(
-            response
-                .into_string()
-                .map_err(NotificationError::Io)?
-                .as_str(),
-        ) {
-            Ok(r) => Ok(r),
-            Err(e) => Err(NotificationError::Deserialize(e)),
-        }
+
+        let body = response.into_string().map_err(NotificationError::Io)?;
+        serde_json::from_str(&body).map_err(NotificationError::Deserialize)
     }
 }
 
-/// Pushover API response <https://pushover.net/api#response>
+/// Pushover API response. <https://pushover.net/api#response>
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Response {
     /// If POST request to API was valid, we will receive an HTTP 200 (OK) status, with a JSON object containing a status code of `1`.
     pub status: u8,
     /// The `request` parameter returned from all API calls is a randomly-generated unique token that we have associated with your request.
     pub request: String,
-    /// …and an `errors` array detailing which parameters were invalid
+    /// ...and an `errors` array detailing which parameters were invalid.
     pub errors: Option<Vec<String>>,
 }
 
@@ -303,8 +318,8 @@ mod tests {
 
     use crate::attachment::Attachment;
     use crate::{
-        sanitize_message, server_url, Monospace, Notification, NotificationError, Priority, Sound,
-        HTML,
+        sanitize_message, send_notification, server_url, Monospace, Notification,
+        NotificationError, Priority, Sound, HTML,
     };
 
     #[test]
@@ -507,5 +522,19 @@ mod tests {
 
         let s = "<script>alert('XSS');</script>";
         assert_eq!("", sanitize_message(s));
+    }
+
+    #[tokio::test]
+    async fn test_sned_message() -> Result<(), NotificationError> {
+        let _m = mock("POST", "/1/messages.json")
+            .with_status(200)
+            .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
+            .create();
+
+        let res = send_notification("token", "user", "message").await?;
+        assert_eq!(1, res.status);
+        assert_eq!("00000000-0000-0000-0000-000000000000", res.request);
+        assert!(res.errors.is_none());
+        Ok(())
     }
 }

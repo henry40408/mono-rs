@@ -1,6 +1,6 @@
 [package]
 name = "pushover"
-version = "2.0.2"
+version = "2.0.3"
 edition = "2021"
 description = "Pushover is Pushover API wrapper with attachment support in Rust 2021 edition"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
