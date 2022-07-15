@@ -78,7 +78,7 @@ struct Opts {
     #[clap(short, long)]
     file: Option<PathBuf>,
     /// Messages may be sent with a different priority that affects how the message is presented to the user e.g. -2, -1, 0, 1, 2. <https://pushover.net/api#priority>
-    #[clap(long)]
+    #[clap(long, allow_hyphen_values = true)]
     priority: Option<String>,
     /// Users can choose from a number of different default sounds to play when receiving notifications. <https://pushover.net/api#sounds>
     #[clap(long)]
