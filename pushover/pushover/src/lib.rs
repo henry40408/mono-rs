@@ -82,10 +82,10 @@ pub struct Notification<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum HTML {
     /// Plain text (default)
-    #[strum(serialize = "0")]
+    #[strum(to_string = "0", serialize = "plain")]
     Plain,
     /// HTML
-    #[strum(serialize = "1")]
+    #[strum(to_string = "1", serialize = "html")]
     HTML,
 }
 
@@ -93,10 +93,10 @@ pub enum HTML {
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Monospace {
     /// Normal (default)
-    #[strum(serialize = "0")]
+    #[strum(to_string = "0", serialize = "normal")]
     Normal,
     /// Monospace
-    #[strum(serialize = "1")]
+    #[strum(to_string = "1", serialize = "monospace")]
     Monospace,
 }
 
@@ -105,19 +105,19 @@ pub enum Monospace {
 #[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
 pub enum Priority {
     /// Normal (default)
-    #[strum(serialize = "0")]
+    #[strum(to_string = "0", serialize = "normal")]
     Normal,
     /// Lowest
-    #[strum(serialize = "-2")]
+    #[strum(to_string = "-2", serialize = "lowest")]
     Lowest,
     /// Low
-    #[strum(serialize = "-1")]
+    #[strum(to_string = "-1", serialize = "low")]
     Low,
     /// High
-    #[strum(serialize = "1")]
+    #[strum(to_string = "1", serialize = "high")]
     High,
     /// Emergency
-    #[strum(serialize = "2")]
+    #[strum(to_string = "2", serialize = "emergency")]
     Emergency,
 }
 
@@ -372,8 +372,10 @@ mod tests {
     fn test_html() -> Result<(), strum::ParseError> {
         assert_eq!("0", HTML::Plain.to_string());
         assert_eq!(HTML::Plain, HTML::from_str("0")?);
+        assert_eq!(HTML::Plain, HTML::from_str("plain")?);
         assert_eq!("1", HTML::HTML.to_string());
         assert_eq!(HTML::HTML, HTML::from_str("1")?);
+        assert_eq!(HTML::HTML, HTML::from_str("html")?);
         Ok(())
     }
 
@@ -381,8 +383,10 @@ mod tests {
     fn test_monospace() -> Result<(), strum::ParseError> {
         assert_eq!("0", Monospace::Normal.to_string());
         assert_eq!(Monospace::Normal, Monospace::from_str("0")?);
+        assert_eq!(Monospace::Normal, Monospace::from_str("normal")?);
         assert_eq!("1", Monospace::Monospace.to_string());
         assert_eq!(Monospace::Monospace, Monospace::from_str("1")?);
+        assert_eq!(Monospace::Monospace, Monospace::from_str("monospace")?);
         Ok(())
     }
 
@@ -390,14 +394,19 @@ mod tests {
     fn test_priority() -> Result<(), strum::ParseError> {
         assert_eq!("-2", Priority::Lowest.to_string());
         assert_eq!(Priority::Lowest, Priority::from_str("-2")?);
+        assert_eq!(Priority::Lowest, Priority::from_str("lowest")?);
         assert_eq!("-1", Priority::Low.to_string());
         assert_eq!(Priority::Low, Priority::from_str("-1")?);
+        assert_eq!(Priority::Low, Priority::from_str("low")?);
         assert_eq!("0", Priority::Normal.to_string());
         assert_eq!(Priority::Normal, Priority::from_str("0")?);
+        assert_eq!(Priority::Normal, Priority::from_str("normal")?);
         assert_eq!("1", Priority::High.to_string());
         assert_eq!(Priority::High, Priority::from_str("1")?);
+        assert_eq!(Priority::High, Priority::from_str("high")?);
         assert_eq!("2", Priority::Emergency.to_string());
         assert_eq!(Priority::Emergency, Priority::from_str("2")?);
+        assert_eq!(Priority::Emergency, Priority::from_str("emergency")?);
         Ok(())
     }
 

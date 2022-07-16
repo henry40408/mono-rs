@@ -77,7 +77,8 @@ struct Opts {
     /// Attach file as notification attachment.
     #[clap(short, long)]
     file: Option<PathBuf>,
-    /// Messages may be sent with a different priority that affects how the message is presented to the user e.g. -2, -1, 0, 1, 2. <https://pushover.net/api#priority>
+    /// Messages may be sent with a different priority that affects how the message is presented to the user
+    /// e.g. -2, -1, 0, 1, 2, lowest, low, normal, high, emergency. <https://pushover.net/api#priority>
     #[clap(long, allow_hyphen_values = true)]
     priority: Option<String>,
     /// Users can choose from a number of different default sounds to play when receiving notifications. <https://pushover.net/api#sounds>
@@ -131,4 +132,40 @@ async fn main() -> anyhow::Result<()> {
         println!("{res:?}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use crate::Opts;
+
+    #[test]
+    fn test_negative_priority() {
+        let parsed: Opts = Opts::from_iter(vec![
+            "--",
+            "-t",
+            "token",
+            "-u",
+            "user",
+            "-m",
+            "message",
+            "--priority",
+            "-2",
+        ]);
+        assert_eq!(parsed.priority, Some("-2".to_string()));
+
+        let parsed: Opts = Opts::from_iter(vec![
+            "--",
+            "-t",
+            "token",
+            "-u",
+            "user",
+            "-m",
+            "message",
+            "--priority",
+            "-1",
+        ]);
+        assert_eq!(parsed.priority, Some("-1".to_string()));
+    }
 }

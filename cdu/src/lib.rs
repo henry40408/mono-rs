@@ -29,7 +29,7 @@ use moka::sync::Cache;
 use tokio::task::JoinHandle;
 use ureq::{Agent, AgentBuilder};
 
-const API_HOST: &'static str = "https://api.cloudflare.com";
+const API_HOST: &str = "https://api.cloudflare.com";
 const HTTP_TIMEOUT: u64 = 30;
 
 #[doc(hidden)]
