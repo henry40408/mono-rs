@@ -1,12 +1,5 @@
 [workspace]
-members = [
-    "cdu",
-    "hcc/core",
-    "hcc/pushover",
-    "pushover/pushover",
-    "pushover/po",
-    "wfs"
-]
+members = ["cdu", "hcc", "pushover/pushover", "pushover/po", "wfs"]
 
 [profile.release]
 lto = true

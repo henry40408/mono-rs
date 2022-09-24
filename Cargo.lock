@@ -753,7 +753,7 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hcc"
-version = "3.0.5"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -765,23 +765,6 @@ dependencies = [
  "webpki",
  "webpki-roots",
  "x509-parser",
-]
-
-[[package]]
-name = "hcc-pushover"
-version = "0.1.11"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "cron",
- "env_logger",
- "futures",
- "hcc",
- "log",
- "logging_timer",
- "pushover",
- "tokio",
 ]
 
 [[package]]
