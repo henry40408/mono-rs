@@ -1,10 +1,9 @@
-use std::borrow::Cow;
 use std::convert::TryFrom;
-use std::fmt::Formatter;
 use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{borrow::Cow, fmt};
 
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
@@ -24,8 +23,8 @@ pub struct Checker {
     pub grace_in_days: i64,
 }
 
-impl std::fmt::Debug for Checker {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Checker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "CheckClient {{ checked_at: {:?}, elapsed: {:?}, grace_in_days: {:?} }}",
@@ -113,15 +112,15 @@ impl Checker {
         };
         let not_after = Utc.timestamp(not_after.timestamp(), 0);
 
-        let duration = not_after - self.checked_at;
-        let days = duration.num_days();
+        let days = (not_after - self.checked_at).num_days();
         let not_after = not_after.timestamp();
-        let state = if days > self.grace_in_days {
-            CertificateState::Ok { days, not_after }
-        } else {
-            CertificateState::Warning { days, not_after }
-        };
+        let warned = days < self.grace_in_days;
 
+        let state = CertificateState::Ok {
+            days,
+            not_after,
+            warned,
+        };
         Checked {
             state,
             ascii: self.ascii,
@@ -173,25 +172,30 @@ impl Checker {
 
 #[cfg(test)]
 mod test {
-    use crate::checked::CertificateState;
-    use crate::checker::Checker;
+    use super::*;
 
     #[tokio::test]
-    async fn test_good_certificate() {
+    async fn t_good_certificate() {
         let mut client = Checker::default();
         client.grace_in_days = 1;
 
         let result = client.check_one("sha256.badssl.com").await;
         assert!(matches!(result.state, CertificateState::Ok { .. }));
         assert!(result.checked_at > 0);
-        if let CertificateState::Ok { days, not_after } = result.state {
+        if let CertificateState::Ok {
+            days,
+            not_after,
+            warned,
+        } = result.state
+        {
             assert!(days > 0);
             assert!(not_after > 0);
+            assert!(!warned);
         }
     }
 
     #[tokio::test]
-    async fn test_bad_certificate() {
+    async fn t_bad_certificate() {
         let mut client = Checker::default();
         client.grace_in_days = 1;
 
@@ -201,7 +205,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_check_many() -> anyhow::Result<()> {
+    async fn t_check_many() -> anyhow::Result<()> {
         let domain_names = vec!["sha256.badssl.com", "expired.badssl.com"];
 
         let mut client = Checker::default();
@@ -221,7 +225,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_check_many_with_grace_in_days() {
+    async fn t_check_many_with_grace_in_days() {
         let domain_name = "sha256.badssl.com";
 
         let mut client = Checker::default();
@@ -230,18 +234,22 @@ mod test {
         let result = client.check_one(domain_name).await;
         assert!(matches!(result.state, CertificateState::Ok { .. }));
 
-        if let CertificateState::Ok { days, not_after: _ } = result.state {
+        if let CertificateState::Ok { days, .. } = result.state {
             let client = Checker {
                 grace_in_days: days + 1,
                 ..Default::default()
             };
             let result = client.check_one(domain_name).await;
-            assert!(matches!(result.state, CertificateState::Warning { .. }));
+            assert!(matches!(result.state, CertificateState::Ok { .. }));
+
+            if let CertificateState::Ok { warned, .. } = result.state {
+                assert!(warned);
+            }
         }
     }
 
     #[tokio::test]
-    async fn test_check_one_invalid() {
+    async fn t_check_one_invalid() {
         let client = Checker::default();
         let result = client.check_one("example.invalid").await;
         assert!(matches!(result.state, CertificateState::Error(..)));

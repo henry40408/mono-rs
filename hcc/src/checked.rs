@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt;
-use std::fmt::Formatter;
 
 use chrono::{DateTime, TimeZone, Utc};
 use num_format::{Locale, ToFormattedString};
@@ -18,13 +17,8 @@ pub enum CertificateState {
         days: i64,
         /// Exact expiration time in seconds since Unix epoch
         not_after: i64,
-    },
-    /// Certificate is going to expire soon
-    Warning {
-        /// Remaining days to the expiration date
-        days: i64,
-        /// Exact expiration time in seconds since Unix epoch
-        not_after: i64,
+        /// Certificate will expire in grace period
+        warned: bool,
     },
     /// Certificate expired
     Expired,
@@ -37,11 +31,16 @@ impl Default for CertificateState {
 }
 
 impl fmt::Display for CertificateState {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CertificateState::NotChecked => write!(f, "NOT_CHECKED"),
-            CertificateState::Ok { .. } => write!(f, "OK"),
-            CertificateState::Warning { .. } => write!(f, "WARNING"),
+            CertificateState::Ok { warned, .. } => {
+                if *warned {
+                    write!(f, "WARNING")
+                } else {
+                    write!(f, "OK")
+                }
+            }
             CertificateState::Expired => write!(f, "EXPIRED"),
             CertificateState::Error(..) => write!(f, "ERROR"),
         }
@@ -116,13 +115,9 @@ impl<'a> Checked<'a> {
                 let domain_name = &self.domain_name;
                 format!("certificate state of {domain_name} is unknown")
             }
-            CertificateState::Ok { days, not_after } => {
-                let domain_name = &self.domain_name;
-                let days = days.to_formatted_string(&Locale::en);
-                let r = Utc.timestamp(not_after, 0).to_rfc3339();
-                format!("certificate of {domain_name} expires in {days} days ({r})")
-            }
-            CertificateState::Warning { days, not_after } => {
+            CertificateState::Ok {
+                days, not_after, ..
+            } => {
                 let domain_name = &self.domain_name;
                 let days = days.to_formatted_string(&Locale::en);
                 let r = Utc.timestamp(not_after, 0).to_rfc3339();
@@ -151,18 +146,17 @@ impl<'a> Checked<'a> {
                     "\u{2753}"
                 }
             }
-            CertificateState::Ok { .. } => {
-                if self.ascii {
+            CertificateState::Ok { warned, .. } => {
+                if warned {
+                    if self.ascii {
+                        "[-]"
+                    } else {
+                        "\u{26a0}\u{fe0f}"
+                    }
+                } else if self.ascii {
                     "[v]"
                 } else {
                     "\u{2705}"
-                }
-            }
-            CertificateState::Warning { .. } => {
-                if self.ascii {
-                    "[-]"
-                } else {
-                    "\u{26a0}\u{fe0f}"
                 }
             }
             CertificateState::Expired | CertificateState::Error(_) => {
@@ -178,7 +172,7 @@ impl<'a> Checked<'a> {
 }
 
 impl<'a> fmt::Display for Checked<'a> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut s = String::with_capacity(100);
 
         s.push_str(&self.state_icon());
@@ -197,11 +191,10 @@ impl<'a> fmt::Display for Checked<'a> {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     use chrono::{Duration, SubsecRound, Utc};
     use std::ops::Add;
-
-    use crate::checked::CertificateState;
-    use crate::Checked;
 
     fn build_checked<'a>() -> Checked<'a> {
         let now = Utc::now().round_subsecs(0);
@@ -213,7 +206,7 @@ mod test {
     }
 
     #[test]
-    fn test_display() {
+    fn t_display() {
         let days = 512;
         let not_after = Utc::now().round_subsecs(0).add(Duration::days(days));
 
@@ -221,6 +214,7 @@ mod test {
         result.state = CertificateState::Ok {
             days,
             not_after: not_after.timestamp(),
+            warned: false,
         };
 
         let left = format!("{result}");
@@ -231,14 +225,15 @@ mod test {
     }
 
     #[test]
-    fn test_display_warning() {
+    fn t_display_warning() {
         let days = 512;
         let not_after = Utc::now().round_subsecs(0).add(Duration::days(days));
 
         let mut result = build_checked();
-        result.state = CertificateState::Warning {
+        result.state = CertificateState::Ok {
             days,
             not_after: not_after.timestamp(),
+            warned: true,
         };
         let left = format!("{result}");
 
@@ -248,7 +243,7 @@ mod test {
     }
 
     #[test]
-    fn test_display_expired() {
+    fn t_display_expired() {
         let mut result = build_checked();
         result.state = CertificateState::Expired;
         let left = format!("{result}");

@@ -70,32 +70,20 @@ async fn check_command(opts: &Opts, domain_names: &[&str], grace_in_days: i64) {
 
 #[cfg(test)]
 mod test {
-    use crate::{check_command, Opts};
+    use super::*;
 
     fn build_opts() -> Opts {
         Opts::default()
     }
 
     #[tokio::test]
-    async fn test_check_command() {
+    async fn t_check_command() {
         let opts = build_opts();
         check_command(&opts, &["sha256.badssl.com"], 7).await;
     }
 
     #[tokio::test]
-    async fn test_check_command_json() {
-        let opts = build_opts();
-        check_command(&opts, &["sha256.badssl.com"], 7).await;
-    }
-
-    #[tokio::test]
-    async fn test_check_command_expired() {
-        let opts = build_opts();
-        check_command(&opts, &["expired.badssl.com"], 7).await;
-    }
-
-    #[tokio::test]
-    async fn test_check_command_expired_json() {
+    async fn t_check_command_expired() {
         let opts = build_opts();
         check_command(&opts, &["expired.badssl.com"], 7).await;
     }
