@@ -79,7 +79,7 @@ pub struct Notification<'a> {
 }
 
 /// To enable HTML formatting. <https://pushover.net/api#html>
-#[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, strum::EnumString)]
 pub enum HTML {
     /// Plain text (default)
     #[strum(to_string = "0", serialize = "plain")]
@@ -90,7 +90,7 @@ pub enum HTML {
 }
 
 /// To enable monospace messages. <https://pushover.net/api#html>
-#[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, strum::EnumString)]
 pub enum Monospace {
     /// Normal (default)
     #[strum(to_string = "0", serialize = "normal")]
@@ -102,7 +102,7 @@ pub enum Monospace {
 
 /// Messages may be sent with a different priority
 /// that affects how the message is presented to the user. <https://pushover.net/api#priority>
-#[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, strum::EnumString)]
 pub enum Priority {
     /// Normal (default)
     #[strum(to_string = "0", serialize = "normal")]
@@ -123,7 +123,7 @@ pub enum Priority {
 
 /// Users can choose from a number of different default sounds
 /// to play when receiving notifications. <https://pushover.net/api#sounds>
-#[derive(Clone, Copy, Debug, PartialEq, strum::Display, strum::EnumString)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 pub enum Sound {
     /// pushover - Pushover (default)

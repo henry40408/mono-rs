@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt;
 
 use chrono::{DateTime, TimeZone, Utc};
-use num_format::{Locale, ToFormattedString};
+use num_format::{Locale, ToFormattedString as _};
 
 /// State of SSL certificate
 #[derive(Debug)]
@@ -10,7 +10,7 @@ pub enum CertificateState {
     /// Default state
     NotChecked,
     /// Any error occurred when
-    Error(String),
+    Error(anyhow::Error),
     /// Certificate is valid
     Ok {
         /// Remaining days to the expiration date
@@ -66,16 +66,16 @@ impl<'a> Checked<'a> {
     /// Error occurred when checking
     ///
     /// ```
+    /// # use anyhow::Error;
     /// use hcc::Checked;
-    /// Checked::error("example.invalid", "invalid DNS lookup");
+    /// Checked::error("example.invalid", Error::msg("invalid DNS lookup"));
     /// ```
-    pub fn error<T, U>(domain_name: T, e: U) -> Self
+    pub fn error<T>(domain_name: T, e: anyhow::Error) -> Self
     where
         T: Into<Cow<'a, str>>,
-        U: std::fmt::Display,
     {
         Checked {
-            state: CertificateState::Error(e.to_string()),
+            state: CertificateState::Error(e),
             domain_name: domain_name.into(),
             ..Default::default()
         }
@@ -108,12 +108,12 @@ impl<'a> Checked<'a> {
     /// let result = Checked::default();
     /// result.sentence();
     /// ```
-    pub fn sentence(&self) -> String {
+    pub fn sentence(&self) -> Cow<'a, str> {
         let domain_name = &self.domain_name;
         match self.state {
             CertificateState::NotChecked => {
                 let domain_name = &self.domain_name;
-                format!("certificate state of {domain_name} is unknown")
+                format!("{domain_name} cert is unknown").into()
             }
             CertificateState::Ok {
                 days, not_after, ..
@@ -121,12 +121,10 @@ impl<'a> Checked<'a> {
                 let domain_name = &self.domain_name;
                 let days = days.to_formatted_string(&Locale::en);
                 let r = Utc.timestamp(not_after, 0).to_rfc3339();
-                format!("certificate of {domain_name} expires in {days} days ({r})")
+                format!("{domain_name} cert expires in {days} days ({r})").into()
             }
-            CertificateState::Expired => format!("certificate of {domain_name} has expired"),
-            CertificateState::Error(ref e) => {
-                format!("failed to check {domain_name}: {e}")
-            }
+            CertificateState::Expired => format!("{domain_name} cert expired").into(),
+            CertificateState::Error(ref e) => format!("failed to check {domain_name}: {e}").into(),
         }
     }
 
@@ -137,7 +135,7 @@ impl<'a> Checked<'a> {
     /// let result = Checked::default();
     /// result.state_icon();
     /// ```
-    pub fn state_icon(&self) -> String {
+    pub fn state_icon(&self) -> Cow<'a, str> {
         let s = match self.state {
             CertificateState::NotChecked => {
                 if self.ascii {
@@ -167,24 +165,19 @@ impl<'a> Checked<'a> {
                 }
             }
         };
-        s.to_string()
+        s.into()
     }
 }
 
 impl<'a> fmt::Display for Checked<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut s = String::with_capacity(100);
-
         s.push_str(&self.state_icon());
-
         s.push(' ');
-
         s.push_str(&self.sentence());
-
         if let Some(elapsed) = self.elapsed {
             s.push_str(&format!(", {elapsed}ms elapsed"));
         }
-
         write!(f, "{s}")
     }
 }
@@ -193,14 +186,14 @@ impl<'a> fmt::Display for Checked<'a> {
 mod test {
     use super::*;
 
-    use chrono::{Duration, SubsecRound, Utc};
+    use chrono::{Duration, SubsecRound as _, Utc};
     use std::ops::Add;
 
     fn build_checked<'a>() -> Checked<'a> {
         let now = Utc::now().round_subsecs(0);
         Checked {
             checked_at: now.timestamp(),
-            domain_name: "example.com".into(),
+            domain_name: "badssl.com".into(),
             ..Default::default()
         }
     }
@@ -220,7 +213,7 @@ mod test {
         let left = format!("{result}");
 
         let r = not_after.to_rfc3339();
-        let right = format!("\u{2705} certificate of example.com expires in {days} days ({r})",);
+        let right = format!("\u{2705} badssl.com cert expires in {days} days ({r})",);
         assert_eq!(left, right);
     }
 
@@ -238,16 +231,17 @@ mod test {
         let left = format!("{result}");
 
         let r = not_after.to_rfc3339();
-        let r = format!("\u{26a0}\u{fe0f} certificate of example.com expires in {days} days ({r})");
-        assert_eq!(left, r);
+        let right = format!("\u{26a0}\u{fe0f} badssl.com cert expires in {days} days ({r})");
+        assert_eq!(left, right);
     }
 
     #[test]
     fn t_display_expired() {
         let mut result = build_checked();
         result.state = CertificateState::Expired;
+
         let left = format!("{result}");
-        let right = "\u{274c} certificate of example.com has expired";
+        let right = "\u{274c} badssl.com cert expired";
         assert_eq!(left, right);
     }
 }

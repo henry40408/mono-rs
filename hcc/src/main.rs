@@ -56,7 +56,10 @@ async fn main() {
     }
 }
 
-async fn check_command(opts: &Opts, domain_names: &[&str], grace_in_days: i64) {
+async fn check_command<T>(opts: &Opts, domain_names: &[T], grace_in_days: i64)
+where
+    T: AsRef<str>,
+{
     let mut client = Checker::default();
     client.ascii = opts.ascii;
     client.elapsed = opts.verbose;
