@@ -202,18 +202,23 @@ where
 }
 
 #[doc(hidden)]
-pub fn sanitize_message<S: AsRef<str>>(message: S) -> String {
+pub fn sanitize_message<'a, T>(message: T) -> Cow<'a, str>
+where
+    T: Into<Cow<'a, str>>,
+{
     let tags = hashset!["b", "i", "u", "font", "a"];
     let tag_attrs = hashmap![
-        "a"=>hashset!["href"],
-        "font"=>hashset!["color"],
+        "a" => hashset!["href"],
+        "font" => hashset!["color"],
     ];
+    let message = message.into();
     // Builder consumes tags and tag_attrs unless maintainer changes method signatures
     ammonia::Builder::default()
         .tags(tags)
         .tag_attributes(tag_attrs)
         .clean(message.as_ref())
         .to_string()
+        .into()
 }
 
 fn add_optional_text<T: Display>(f: &mut Multipart, n: &'static str, v: Option<T>) {
@@ -260,7 +265,7 @@ impl<'a> Notification<'a> {
 
         form.add_text("token", self.token.to_string());
         form.add_text("user", self.identifier.to_string()); // User or group key
-        form.add_text("message", sanitize_message(&self.message));
+        form.add_text("message", sanitize_message(self.message.clone()));
 
         add_optional_text(&mut form, "device", self.device.as_ref());
         add_optional_text(&mut form, "title", self.title.as_ref());
@@ -311,24 +316,20 @@ pub struct Response {
 
 #[cfg(test)]
 mod tests {
-    use mime::Mime;
-    use std::str::FromStr;
+    use super::*;
 
+    use std::str::FromStr as _;
+
+    use mime::Mime;
     use mockito::mock;
 
-    use crate::attachment::Attachment;
-    use crate::{
-        sanitize_message, send_notification, server_url, Monospace, Notification,
-        NotificationError, Priority, Sound, HTML,
-    };
-
     #[test]
-    fn test_new() {
+    fn t_new() {
         build_notification();
     }
 
     #[tokio::test]
-    async fn test_send() -> Result<(), NotificationError> {
+    async fn t_send() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
             .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
@@ -344,7 +345,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_device() -> Result<(), NotificationError> {
+    async fn t_device() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
             .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
@@ -369,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn test_html() -> Result<(), strum::ParseError> {
+    fn t_html() -> Result<(), strum::ParseError> {
         assert_eq!("0", HTML::Plain.to_string());
         assert_eq!(HTML::Plain, HTML::from_str("0")?);
         assert_eq!(HTML::Plain, HTML::from_str("plain")?);
@@ -380,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn test_monospace() -> Result<(), strum::ParseError> {
+    fn t_monospace() -> Result<(), strum::ParseError> {
         assert_eq!("0", Monospace::Normal.to_string());
         assert_eq!(Monospace::Normal, Monospace::from_str("0")?);
         assert_eq!(Monospace::Normal, Monospace::from_str("normal")?);
@@ -391,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn test_priority() -> Result<(), strum::ParseError> {
+    fn t_priority() -> Result<(), strum::ParseError> {
         assert_eq!("-2", Priority::Lowest.to_string());
         assert_eq!(Priority::Lowest, Priority::from_str("-2")?);
         assert_eq!(Priority::Lowest, Priority::from_str("lowest")?);
@@ -411,7 +412,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sound() -> Result<(), strum::ParseError> {
+    fn t_sound() -> Result<(), strum::ParseError> {
         assert_eq!("pushover", Sound::Pushover.to_string());
         assert_eq!(Sound::Pushover, Sound::from_str("pushover")?);
         assert_eq!("bike", Sound::Bike.to_string());
@@ -462,7 +463,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_attach_and_send() -> Result<(), NotificationError> {
+    async fn t_attach_and_send() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
             .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
@@ -479,7 +480,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_attach_url_and_send() -> Result<(), NotificationError> {
+    async fn t_attach_url_and_send() -> Result<(), NotificationError> {
         let body = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
         let _m = mock("POST", "/1/messages.json")
@@ -510,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitized_message() {
+    fn t_sanitized_message() {
         let s = "<b>bold</b>";
         assert_eq!(s, sanitize_message(s));
 
@@ -534,7 +535,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sned_message() -> Result<(), NotificationError> {
+    async fn t_sned_message() -> Result<(), NotificationError> {
         let _m = mock("POST", "/1/messages.json")
             .with_status(200)
             .with_body(r#"{"status":1,"request":"00000000-0000-0000-0000-000000000000"}"#)
