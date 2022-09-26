@@ -209,7 +209,6 @@ mod test {
         assert_eq!(2, results.len());
 
         let result = &results[0];
-        dbg!(&result);
         assert!(matches!(result.state, CertificateState::Ok { .. }));
 
         let result = &results[1];
