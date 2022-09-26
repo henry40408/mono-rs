@@ -20,7 +20,6 @@ use std::time::Duration;
 use clap::Parser;
 use cloudflare::framework::response::ApiFailure;
 use cron::Schedule;
-use env_logger::Env;
 use log::{debug, info, warn, Level};
 use logging_timer::{finish, timer};
 
@@ -49,7 +48,7 @@ pub struct Opts {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    pretty_env_logger::init();
 
     let opts: Opts = Opts::parse();
 

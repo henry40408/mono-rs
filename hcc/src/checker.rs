@@ -25,11 +25,12 @@ pub struct Checker {
 
 impl fmt::Debug for Checker {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "CheckClient {{ checked_at: {:?}, elapsed: {:?}, grace_in_days: {:?} }}",
-            self.checked_at, self.elapsed, self.grace_in_days
-        )
+        f.debug_struct("Checker")
+            .field("checked_at", &self.checked_at)
+            .field("ascii", &self.ascii)
+            .field("elapsed", &self.elapsed)
+            .field("grace_in_days", &self.grace_in_days)
+            .finish()
     }
 }
 

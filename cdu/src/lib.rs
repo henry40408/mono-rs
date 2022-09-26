@@ -22,7 +22,6 @@ use anyhow::bail;
 use cloudflare::endpoints::dns::{DnsContent, DnsRecord};
 use cloudflare::endpoints::zone::Zone;
 use cloudflare::framework::response::ApiSuccess;
-use derivative::Derivative;
 use log::{debug, Level};
 use logging_timer::{finish, stimer};
 use moka::sync::Cache;
@@ -32,13 +31,13 @@ use ureq::{Agent, AgentBuilder};
 const API_HOST: &str = "https://api.cloudflare.com";
 const HTTP_TIMEOUT: u64 = 30;
 
-#[doc(hidden)]
+/// Cannot fetch public IPv4 address
 #[derive(Clone, Copy, Debug)]
 pub struct NoIPV4;
 
 impl Display for NoIPV4 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "cannot determine public IPv4 address")
+        write!(f, "cannot fetch public IPv4 address")
     }
 }
 
@@ -63,15 +62,21 @@ impl Display for Cached {
 }
 
 /// Cloudflare DNS Update
-#[doc(hidden)]
-#[derive(Derivative)]
-#[derivative(Debug)]
 pub struct Cdu<'a> {
     token: Cow<'a, str>,
     zone: Cow<'a, str>,
     record_names: Vec<String>,
-    #[derivative(Debug = "ignore")]
     cache: Cache<CacheKey, Cached>,
+}
+
+impl<'a> std::fmt::Debug for Cdu<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cdu")
+            .field("token", &self.token)
+            .field("zone", &self.zone)
+            .field("record_names", &self.record_names)
+            .finish()
+    }
 }
 
 impl<'a> Cdu<'a> {
