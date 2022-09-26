@@ -61,8 +61,9 @@ async fn main() -> anyhow::Result<()> {
     let cdu = Cdu::new(&opts.token, &opts.zone, &record_names);
 
     if opts.daemon {
-        debug!("run as daemon with cron {}", opts.cron);
-        run_daemon(&cdu, &opts.cron).await?;
+        let cron = &opts.cron;
+        debug!("run as daemon with cron {cron}");
+        run_daemon(&cdu, cron).await?;
     } else {
         let zone = &opts.zone;
         let tmr = timer!(Level::Debug; "RUN_ONCE", "zone {zone}");
@@ -86,7 +87,7 @@ async fn run_once(cdu: &Cdu<'_>) -> anyhow::Result<()> {
             Err(e) => {
                 if let Some(duration) = duration {
                     if e.is::<ApiFailure>() || e.is::<NoIPV4>() {
-                        warn!("retry in {:?} because of {}", duration, e);
+                        warn!("retry in {duration:?} because of {e}");
                         thread::sleep(duration);
                     } else {
                         return Err(e);
@@ -107,7 +108,7 @@ where
 {
     let schedule = Schedule::from_str(cron.into().as_ref())?;
     for datetime in schedule.upcoming(chrono::Utc) {
-        info!("update DNS records at {}", datetime);
+        info!("update DNS records at {datetime}");
 
         loop {
             if chrono::Utc::now() > datetime {
