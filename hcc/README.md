@@ -21,7 +21,7 @@ hcc check httpbin.org
 $ export DOMAIN_NAMES=www.example.com,sha256.badssl.com
 $ export PUSHOVER_TOKEN=[Pushover API token]
 $ export PUSHOVER_USER=[Pushover user key]
-$ hcc-pushover
+$ hcc daemon
 ```
 
 ## Contributing

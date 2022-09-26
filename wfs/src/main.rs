@@ -14,7 +14,6 @@
 //!
 //! Windows is **NOT SUPPORTED**.
 
-use env_logger::Env;
 #[cfg(target_os = "windows")]
 use log::error;
 #[cfg(not(target_os = "windows"))]
@@ -24,7 +23,7 @@ use tokio::signal::unix::{signal, SignalKind};
 
 #[cfg(target_os = "windows")]
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    pretty_env_logger::init();
     error!("windows is NOT supported");
 }
 
@@ -32,7 +31,7 @@ fn main() {
 #[cfg(not(target_os = "windows"))]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    pretty_env_logger::init();
 
     info!("wait for SIGINT or SIGTERM");
 

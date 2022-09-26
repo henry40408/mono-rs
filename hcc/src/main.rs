@@ -63,7 +63,7 @@ enum Commands {
         #[clap(short, long, default_value = "0 0 0 * * *")]
         cron: String,
         /// One or many domain names to check
-        #[clap()]
+        #[clap(env = "DOMAIN_NAMES")]
         domain_names: Vec<String>,
     },
 }
