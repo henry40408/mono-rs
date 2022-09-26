@@ -230,20 +230,19 @@ checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
 
 [[package]]
 name = "cdu"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
  "cloudflare",
  "cron",
- "derivative",
- "env_logger 0.9.1",
  "exponential-backoff",
  "futures",
  "log",
  "logging_timer",
  "moka",
+ "pretty_env_logger",
  "public-ip",
  "tokio",
  "ureq",
@@ -476,17 +475,6 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "rusticata-macros",
-]
-
-[[package]]
-name = "derivative"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -766,7 +754,7 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hcc"
-version = "4.0.0"
+version = "4.0.1"
 dependencies = [
  "anyhow",
  "chrono",

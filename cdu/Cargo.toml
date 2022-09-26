@@ -1,6 +1,6 @@
 [package]
 name = "cdu"
-version = "1.2.2"
+version = "1.2.3"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
 edition = "2021"
 description = "Cloudflare DNS record update"
@@ -18,8 +18,7 @@ clap = { version = "3", default-features = false, features = [
 ] }
 cloudflare = { version = "0.9.1", default-features = false } # use API response structs only
 cron = "0.12"
-derivative = "2.2" # avoid cache in struct being serialized by debug trait
-env_logger = "0.9"
+pretty_env_logger = "0.4"
 exponential-backoff = "1.1"
 futures = "0.3"
 log = "0.4"
