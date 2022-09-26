@@ -4,6 +4,7 @@ use std::io::Read;
 use std::path::Path;
 use std::str::FromStr as _;
 
+use log::debug;
 use mime::Mime;
 use thiserror::Error;
 use url::Url;
@@ -26,7 +27,6 @@ pub enum AttachmentError {
 }
 
 /// Notification attachment. Image in most cases.
-#[derive(Debug)]
 pub struct Attachment<'a> {
     /// Filename.
     pub(crate) filename: Cow<'a, str>,
@@ -34,6 +34,30 @@ pub struct Attachment<'a> {
     pub(crate) mime: Mime,
     /// Attachment content.
     pub(crate) content: Vec<u8>,
+}
+
+impl<'a> std::fmt::Debug for Attachment<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let size = &self.content.len();
+        let content = format!("size={size} bytes");
+        f.debug_struct("Attachment")
+            .field("filename", &self.filename)
+            .field("mime", &self.mime)
+            .field("content", &content)
+            .finish()
+    }
+}
+
+impl<'a> TryFrom<Vec<u8>> for Attachment<'a> {
+    type Error = AttachmentError;
+
+    fn try_from(content: Vec<u8>) -> Result<Self, Self::Error> {
+        let inferred = infer::get(&content).ok_or(AttachmentError::Infer)?;
+        let mime = Mime::from_str(inferred.mime_type()).map_err(|_e| AttachmentError::Infer)?;
+        let bytes = content.len();
+        debug!("load attachment from memory size={bytes} mime_type={mime}");
+        Ok(Self::new("untitled", mime, content.as_slice()))
+    }
 }
 
 impl<'a> Attachment<'a> {
@@ -54,27 +78,29 @@ impl<'a> Attachment<'a> {
     where
         T: AsRef<Path>,
     {
+        let path = path.as_ref();
         let mut buffer = Vec::new();
-        let mut handle = File::open(path.as_ref())?;
+        let mut handle = File::open(path)?;
         handle.read_to_end(&mut buffer)?;
         let filename = path
-            .as_ref()
             .file_name()
-            .map_or("filename", |t| t.to_str().map_or("filename", |t| t));
+            .map_or("untitled", |t| t.to_str().map_or("untitled", |t| t));
         let inferred = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
         let mime = Mime::from_str(inferred.mime_type()).map_err(|_e| AttachmentError::Infer)?;
+        let bytes = buffer.len();
+        debug!("load attachment from {path:?} filename={filename} size={bytes} mime_type={mime}");
         Ok(Self::new(filename.to_owned(), mime, &buffer))
     }
 
     /// Creates an [`Attachment`] from URL.
     pub async fn from_url<T>(url: T) -> Result<Attachment<'a>, AttachmentError>
     where
-        T: AsRef<str>,
+        T: AsRef<str> + std::fmt::Display,
     {
         let parsed = Url::parse(url.as_ref())?;
         let filename = parsed
             .path_segments()
-            .map_or("filename", |s| s.last().map_or("filename", |s| s));
+            .map_or("untitled", |s| s.last().map_or("untitled", |s| s));
         let res = ureq::get(parsed.as_str())
             .call()
             .map_err(|e| AttachmentError::UReq(Box::new(e)))?;
@@ -82,6 +108,8 @@ impl<'a> Attachment<'a> {
         res.into_reader().read_to_end(&mut buffer)?;
         let inferred = infer::get(&buffer).ok_or(AttachmentError::Infer)?;
         let mime = Mime::from_str(inferred.mime_type()).map_err(|_e| AttachmentError::Infer)?;
+        let bytes = buffer.len();
+        debug!("load attachment from {url} filename={filename} size={bytes} mime_type={mime}");
         Ok(Self::new(filename.to_owned(), mime, &buffer))
     }
 }
@@ -96,7 +124,7 @@ mod tests {
 
     #[test]
     fn t_attachment_new() {
-        Attachment::new("filename", Mime::from_str("plain/text").unwrap(), &[]);
+        Attachment::new("untitled", Mime::from_str("plain/text").unwrap(), &[]);
     }
 
     #[tokio::test]
@@ -125,15 +153,15 @@ mod tests {
     #[tokio::test]
     async fn t_attach_url() -> Result<(), AttachmentError> {
         let body = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        let _m = mock("GET", "/filename.png")
+        let _m = mock("GET", "/untitled.png")
             .with_status(200)
             .with_body(&body)
             .create();
 
         let host = server_url();
-        let u = format!("{host}/filename.png");
+        let u = format!("{host}/untitled.png");
         let a = Attachment::from_url(u).await?;
-        assert_eq!("filename.png", a.filename);
+        assert_eq!("untitled.png", a.filename);
         assert_eq!("image/png", a.mime.to_string());
         assert_eq!(body.len(), a.content.len());
         Ok(())

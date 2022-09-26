@@ -102,7 +102,7 @@ where
     let results = client.check_many(&domain_names).await;
     let mut tasks = vec![];
     for result in results.iter() {
-        println!("{}", result);
+        println!("{result}");
         if should_notify {
             tasks.push(notify(opts, result.to_string()));
         }
@@ -126,7 +126,7 @@ where
     let cron = cron.as_ref();
     let schedule = Schedule::from_str(cron)?;
     for next in schedule.upcoming(Utc) {
-        debug!("check certificates of {:?} at {:?}", domain_names, next);
+        debug!("check certificates of {domain_names:?} at {next:?}");
         loop {
             if Utc::now().timestamp() >= next.timestamp() {
                 break;
@@ -134,11 +134,11 @@ where
             tokio::time::sleep(Duration::from_millis(999)).await;
         }
 
-        debug!("check {:?}", domain_names);
+        debug!("check {domain_names:?}");
         let results = client.check_many(domain_names).await;
         let mut tasks = vec![];
         for result in results.iter() {
-            debug!("{}", result);
+            debug!("{result}");
             tasks.push(notify(opts, result.to_string()));
         }
         futures::future::join_all(tasks).await;
