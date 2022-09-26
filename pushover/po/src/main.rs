@@ -37,8 +37,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::Parser;
-use env_logger::Env;
-use log::Level;
+use log::{debug, Level};
 use logging_timer::{finish, stimer};
 
 use pushover::{Attachment, Monospace, Notification, Priority, Sound, HTML};
@@ -95,7 +94,9 @@ struct Opts {
 #[doc(hidden)]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    use std::io::Read as _;
+
+    pretty_env_logger::init();
 
     let opts: Opts = Opts::parse();
 
@@ -116,7 +117,13 @@ async fn main() -> anyhow::Result<()> {
     notification.monospace = opts.monospace.then(|| Monospace::Monospace);
 
     let attachment = if let Some(ref p) = opts.file {
+        debug!("load attachment from {p:?}");
         Some(Attachment::from_path(p).await?)
+    } else if atty::isnt(atty::Stream::Stdin) {
+        debug!("load attachment from standard input");
+        let mut buf = Vec::new();
+        std::io::stdin().read_to_end(&mut buf)?;
+        Some(Attachment::try_from(buf)?)
     } else {
         None
     };
