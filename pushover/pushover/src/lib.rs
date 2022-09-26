@@ -12,6 +12,7 @@
 
 //! Pushover is Pushover API wrapper with attachment support in Rust 2021 edition.
 
+use log::debug;
 use maplit::{hashmap, hashset};
 use multipart::client::lazy::Multipart;
 use serde::{Deserialize, Serialize};
@@ -293,13 +294,18 @@ impl<'a> Notification<'a> {
         let form = form.prepare().map_err(|e| e.error)?;
         let boundary = form.boundary();
         let content_type = format!("multipart/form-data; boundary={boundary}");
+
+        debug!("send message: {self:?}");
         let response = ureq::post(&uri)
             .set("Content-Type", &content_type)
             .send(form)
             .map_err(|e| NotificationError::UReq(Box::new(e)))?;
 
         let body = response.into_string().map_err(NotificationError::Io)?;
-        serde_json::from_str(&body).map_err(NotificationError::Deserialize)
+
+        let res = serde_json::from_str(&body).map_err(NotificationError::Deserialize)?;
+        debug!("pushover response: {res:?}");
+        Ok(res)
     }
 }
 
