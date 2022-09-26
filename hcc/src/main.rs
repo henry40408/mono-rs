@@ -12,11 +12,14 @@
 
 //! HTTPS Certificate Check
 
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
+use chrono::Utc;
 use clap::Parser;
 
+use cron::Schedule;
 use hcc::Checker;
+use log::debug;
 use pushover::{send_notification, NotificationError};
 
 #[derive(Debug, Default, Parser)]
@@ -28,6 +31,9 @@ struct Opts {
     /// Verbose mode
     #[clap(short, long)]
     verbose: bool,
+    /// Grace period in days
+    #[clap(short, long = "grace", default_value = "7")]
+    grace_in_days: i64,
     /// Pushover token
     #[clap(long, env = "PUSHOVER_TOKEN")]
     pushover_token: Option<String>,
@@ -43,9 +49,9 @@ enum Commands {
     /// Check domain name(s) immediately
     #[clap()]
     Check {
-        /// Grace period in days
-        #[clap(short, long = "grace", default_value = "7")]
-        grace_in_days: i64,
+        /// Send notification
+        #[clap(long)]
+        notify: bool,
         /// One or many domain names to check
         #[clap()]
         domain_names: Vec<String>,
@@ -54,41 +60,89 @@ enum Commands {
     #[clap()]
     Daemon {
         /// Cron
-        #[clap(short, long, default_value = "0 0 * * *")]
+        #[clap(short, long, default_value = "0 0 0 * * *")]
         cron: String,
+        /// One or many domain names to check
+        #[clap()]
+        domain_names: Vec<String>,
     },
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    pretty_env_logger::init();
+
     let opts: Opts = Opts::parse();
     if let Some(Commands::Check {
-        ref domain_names,
-        grace_in_days,
-    }) = opts.command
+        domain_names,
+        notify,
+    }) = &opts.command
     {
-        let domain_names: Vec<&str> = domain_names.iter().map(AsRef::as_ref).collect();
-        check_command(&opts, &domain_names, grace_in_days).await?;
+        check_command(&opts, domain_names, *notify).await?;
+    }
+    if let Some(Commands::Daemon { cron, domain_names }) = &opts.command {
+        daemon_command(&opts, cron, domain_names).await?;
     }
     Ok(())
 }
 
-async fn check_command<T>(opts: &Opts, domain_names: &[T], grace_in_days: i64) -> anyhow::Result<()>
+async fn check_command<T>(
+    opts: &Opts,
+    domain_names: &[T],
+    should_notify: bool,
+) -> anyhow::Result<()>
 where
     T: AsRef<str>,
 {
     let mut client = Checker::default();
     client.ascii = opts.ascii;
     client.elapsed = opts.verbose;
-    client.grace_in_days = grace_in_days;
+    client.grace_in_days = opts.grace_in_days;
 
-    let results = client.check_many(domain_names).await;
+    let results = client.check_many(&domain_names).await;
     let mut tasks = vec![];
     for result in results.iter() {
         println!("{}", result);
-        tasks.push(notify(opts, result.to_string()));
+        if should_notify {
+            tasks.push(notify(opts, result.to_string()));
+        }
     }
     futures::future::join_all(tasks).await;
+    Ok(())
+}
+
+async fn daemon_command<'a, T, U>(opts: &Opts, cron: T, domain_names: &[U]) -> anyhow::Result<()>
+where
+    T: AsRef<str>,
+    U: AsRef<str> + std::fmt::Debug,
+{
+    use std::str::FromStr as _;
+
+    let mut client = Checker::default();
+    client.ascii = opts.ascii;
+    client.elapsed = opts.verbose;
+    client.grace_in_days = opts.grace_in_days;
+
+    let cron = cron.as_ref();
+    let schedule = Schedule::from_str(cron)?;
+    for next in schedule.upcoming(Utc) {
+        debug!("check certificates of {:?} at {:?}", domain_names, next);
+        loop {
+            if Utc::now().timestamp() >= next.timestamp() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(999)).await;
+        }
+
+        debug!("check {:?}", domain_names);
+        let results = client.check_many(domain_names).await;
+        let mut tasks = vec![];
+        for result in results.iter() {
+            debug!("{}", result);
+            tasks.push(notify(opts, result.to_string()));
+        }
+        futures::future::join_all(tasks).await;
+    }
     Ok(())
 }
 
@@ -100,13 +154,15 @@ fn get_pushover_config(opts: &'_ Opts) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
 
 async fn notify<'a, T>(opts: &Opts, message: T) -> Result<(), NotificationError>
 where
-    T: Into<Cow<'a, str>>,
+    T: Into<Cow<'a, str>> + std::fmt::Debug,
 {
     let (token, user) = match get_pushover_config(opts) {
         Some((t, u)) => (t, u),
         None => return Ok(()),
     };
-    send_notification(token, user, message.into()).await?;
+    debug!("send pushover notification {:?}", message);
+    let res = send_notification(token, user, message.into()).await?;
+    debug!("pushover response {:?}", res);
     Ok(())
 }
 
@@ -121,7 +177,7 @@ mod test {
     #[tokio::test]
     async fn t_check_command() {
         let opts = build_opts();
-        check_command(&opts, &["sha256.badssl.com"], 7)
+        check_command(&opts, &["sha256.badssl.com"], false)
             .await
             .unwrap();
     }
@@ -129,7 +185,7 @@ mod test {
     #[tokio::test]
     async fn t_check_command_expired() {
         let opts = build_opts();
-        check_command(&opts, &["expired.badssl.com"], 7)
+        check_command(&opts, &["expired.badssl.com"], false)
             .await
             .unwrap();
     }
