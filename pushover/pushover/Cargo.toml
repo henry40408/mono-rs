@@ -1,6 +1,6 @@
 [package]
 name = "pushover"
-version = "2.0.4"
+version = "2.0.5"
 edition = "2021"
 description = "Pushover is Pushover API wrapper with attachment support in Rust 2021 edition"
 authors = ["Heng-Yi Wu <2316687+henry40408@users.noreply.github.com>"]
@@ -13,7 +13,9 @@ ammonia = "3"
 infer = "0.9"
 maplit = "1" # for ammonia
 mime = "0.3"
-multipart = { version = "0.18", default-features = false, features = ["client"] }
+multipart = { version = "0.18", default-features = false, features = [
+  "client",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 strum = { version = "0.24", features = ["derive"] }

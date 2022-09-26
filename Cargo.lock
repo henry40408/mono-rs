@@ -238,7 +238,7 @@ dependencies = [
  "cloudflare",
  "cron",
  "derivative",
- "env_logger",
+ "env_logger 0.9.1",
  "exponential-backoff",
  "futures",
  "log",
@@ -529,12 +529,25 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
+dependencies = [
+ "atty",
+ "humantime 1.3.0",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
+name = "env_logger"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c90bf5f19754d10198ccb95b70664fc925bd1fc090a0fd9a6ebc54acc8cd6272"
 dependencies = [
  "atty",
- "humantime",
+ "humantime 2.1.0",
  "log",
  "regex",
  "termcolor",
@@ -753,35 +766,22 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hcc"
-version = "3.0.5"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "futures",
- "num-format",
- "rustls",
- "tokio",
- "webpki",
- "webpki-roots",
- "x509-parser",
-]
-
-[[package]]
-name = "hcc-pushover"
-version = "0.1.11"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
  "cron",
- "env_logger",
  "futures",
- "hcc",
  "log",
- "logging_timer",
+ "num-format",
+ "pretty_env_logger",
  "pushover",
+ "rustls",
  "tokio",
+ "webpki",
+ "webpki-roots",
+ "x509-parser",
 ]
 
 [[package]]
@@ -846,6 +846,15 @@ name = "httpdate"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
+
+[[package]]
+name = "humantime"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df004cfca50ef23c36850aaaa59ad52cc70d0e90243c3c7737a4dd32dc7a3c4f"
+dependencies = [
+ "quick-error",
+]
 
 [[package]]
 name = "humantime"
@@ -1398,7 +1407,7 @@ version = "0.1.8"
 dependencies = [
  "anyhow",
  "clap",
- "env_logger",
+ "env_logger 0.9.1",
  "log",
  "logging_timer",
  "pushover",
@@ -1416,6 +1425,16 @@ name = "precomputed-hash"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
+
+[[package]]
+name = "pretty_env_logger"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "926d36b9553851b8b0005f1275891b392ee4d2d833852c417ed025477350fb9d"
+dependencies = [
+ "env_logger 0.7.1",
+ "log",
+]
 
 [[package]]
 name = "proc-macro-error"
@@ -1480,7 +1499,7 @@ dependencies = [
 
 [[package]]
 name = "pushover"
-version = "2.0.4"
+version = "2.0.5"
 dependencies = [
  "ammonia",
  "infer",
@@ -1496,6 +1515,12 @@ dependencies = [
  "ureq",
  "url",
 ]
+
+[[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quote"
@@ -2478,7 +2503,7 @@ name = "wfs"
 version = "0.1.5"
 dependencies = [
  "anyhow",
- "env_logger",
+ "env_logger 0.9.1",
  "log",
  "tokio",
 ]
