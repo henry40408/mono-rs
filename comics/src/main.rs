@@ -16,10 +16,12 @@ use std::{
     fs, io,
     net::SocketAddr,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use clap::Parser;
-use warp::Filter;
+use log::{debug, error, info};
+use warp::{hyper::StatusCode, Filter};
 
 #[derive(Parser)]
 #[clap(about, author, version)]
@@ -32,6 +34,7 @@ struct Opts {
     data_dir: String,
 }
 
+#[derive(Debug)]
 struct Comic {
     cover: PathBuf,
     name: String,
@@ -65,10 +68,16 @@ where
                     .unwrap()
             });
 
-            if let Some(page) = pages.first() {
+            if let Some(cover) = pages.first() {
+                let name = dir.path();
+                let name = name
+                    .file_name()
+                    .map(|s| s.to_string_lossy())
+                    .unwrap_or("untitled".into());
+                debug!("load comic {name}");
                 let comic = Comic {
-                    cover: page.to_path_buf(),
-                    name: dir.path().to_string_lossy().to_string(),
+                    cover: cover.to_path_buf(),
+                    name: name.into(),
                     path: dir.path().to_path_buf(),
                 };
                 comics.push(comic);
@@ -78,6 +87,9 @@ where
 
     comics.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
 
+    let count = comics.len();
+    info!("{count} comic(s) loaded");
+
     Ok(comics)
 }
 
@@ -85,11 +97,58 @@ where
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
-    let opts = Opts::parse();
+    let opts = Arc::new(Opts::parse());
 
-    let static_route = warp::path("static").and(warp::fs::dir(opts.data_dir));
+    let opts_c = opts.clone();
+    let comics = Arc::new(Mutex::new(list_comics(&opts_c.data_dir)?));
+    let comics_m = warp::any().map(move || comics.clone());
 
-    let router = static_route;
+    let opts_c = opts.clone();
+    let opts_m = warp::any().map(move || opts_c.clone());
+
+    let index_route =
+        warp::path::end()
+            .and(comics_m.clone())
+            .map(|comics: Arc<Mutex<Vec<Comic>>>| {
+                let _comics = comics.lock().unwrap();
+                format!("root")
+            });
+
+    let refresh_route = warp::path("refresh")
+        .and(opts_m.clone())
+        .and(comics_m.clone())
+        .map(|opts: Arc<Opts>, comics: Arc<Mutex<Vec<Comic>>>| {
+            let mut comics = comics.lock().unwrap();
+            let new_comics = match list_comics(&opts.data_dir) {
+                Err(e) => {
+                    error!("{e:?}");
+                    return format!("cannot refresh");
+                }
+                Ok(cs) => cs,
+            };
+            *comics = new_comics;
+            format!("refresh")
+        });
+
+    let comic_route = warp::path!("comic" / String).and(comics_m.clone()).map(
+        |path: String, comics: Arc<Mutex<Vec<Comic>>>| {
+            let comics = comics.lock().unwrap();
+            let (s, r) = if let Some(comic) = comics.iter().find(|c| c.name == path.as_str()) {
+                (StatusCode::OK, warp::reply::html(format!("{comic:?}")))
+            } else {
+                (StatusCode::NOT_FOUND, warp::reply::html("".into()))
+            };
+            warp::reply::with_status(r, s)
+        },
+    );
+
+    let data_dir = opts.data_dir.clone();
+    let static_route = warp::path("static").and(warp::fs::dir(data_dir));
+
+    let router = index_route
+        .or(refresh_route)
+        .or(comic_route)
+        .or(static_route);
 
     let bind: SocketAddr = opts.bind.parse()?;
     warp::serve(router).run(bind).await;
@@ -104,15 +163,21 @@ mod tests {
     #[test]
     fn t_list_comics() {
         let comics = list_comics("./data").unwrap();
-        assert_eq!(2, comics.len());
+        assert_eq!(3, comics.len());
 
         let comic = comics.get(0).unwrap();
+        assert_eq!(
+            "./data/comic+01/001.png",
+            comic.cover.to_string_lossy().to_string()
+        );
+
+        let comic = comics.get(1).unwrap();
         assert_eq!(
             "./data/comic01/001.png",
             comic.cover.to_string_lossy().to_string()
         );
 
-        let comic = comics.get(1).unwrap();
+        let comic = comics.get(2).unwrap();
         assert_eq!(
             "./data/comic02/002.png",
             comic.cover.to_string_lossy().to_string()
