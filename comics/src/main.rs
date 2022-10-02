@@ -262,6 +262,13 @@ async fn main() -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
+    fn join_path<T>(segments: &[T]) -> PathBuf
+    where
+        T: AsRef<Path>,
+    {
+        segments.iter().collect()
+    }
+
     #[test]
     fn t_list_comics() {
         let comics = list_comics("./data").unwrap();
@@ -270,15 +277,12 @@ mod tests {
         assert_eq!(3, comics.len());
 
         let comic = comics.get(0).unwrap();
-        assert_eq!(
-            "comic+01/001.png",
-            comic.cover.to_string_lossy().to_string()
-        );
+        assert_eq!(join_path(&vec!["comic+01", "001.png"]), comic.cover);
 
         let comic = comics.get(1).unwrap();
-        assert_eq!("comic01/001.png", comic.cover.to_string_lossy().to_string());
+        assert_eq!(join_path(&vec!["comic01", "001.png"]), comic.cover);
 
         let comic = comics.get(2).unwrap();
-        assert_eq!("comic02/002.png", comic.cover.to_string_lossy().to_string());
+        assert_eq!(join_path(&vec!["comic02", "002.png"]), comic.cover);
     }
 }
