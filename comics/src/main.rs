@@ -54,6 +54,8 @@ struct Opts {
 }
 
 mod filters {
+    /// Custom filter to encode string for URL
+    #[allow(dead_code)]
     pub fn urlencode(s: &str) -> askama::Result<String> {
         Ok(urlencoding::encode(s).into())
     }
