@@ -269,20 +269,14 @@ mod tests {
 
         let comic = comics.get(0).unwrap();
         assert_eq!(
-            "./data/comic+01/001.png",
+            "comic+01/001.png",
             comic.cover.to_string_lossy().to_string()
         );
 
         let comic = comics.get(1).unwrap();
-        assert_eq!(
-            "./data/comic01/001.png",
-            comic.cover.to_string_lossy().to_string()
-        );
+        assert_eq!("comic01/001.png", comic.cover.to_string_lossy().to_string());
 
         let comic = comics.get(2).unwrap();
-        assert_eq!(
-            "./data/comic02/002.png",
-            comic.cover.to_string_lossy().to_string()
-        );
+        assert_eq!("comic02/002.png", comic.cover.to_string_lossy().to_string());
     }
 }
