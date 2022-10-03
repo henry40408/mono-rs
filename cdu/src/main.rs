@@ -130,7 +130,13 @@ mod tests {
 
     #[test]
     fn t_daemon_mode() {
-        let opts = Opts::try_parse_from(vec!["--", "--daemon"]).unwrap();
+        let opts = Opts::try_parse_from(vec![
+            "--", "-t", "token", "-z", "zone", "-r", "records", "--daemon",
+        ])
+        .unwrap();
         assert!(opts.daemon);
+        assert_eq!(opts.records, "records");
+        assert_eq!(opts.token, "token");
+        assert_eq!(opts.zone, "zone");
     }
 }
