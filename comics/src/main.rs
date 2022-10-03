@@ -43,13 +43,13 @@ struct ComicTemplate<'a> {
 }
 
 #[derive(Parser)]
-#[clap(about, author, version)]
+#[command(about, author, version)]
 struct Opts {
     /// Bind host and port
-    #[clap(short, long, default_value = "127.0.0.1:3000")]
+    #[arg(short, long, default_value = "127.0.0.1:3000")]
     bind: String,
     /// Data directory
-    #[clap(short, long, default_value = "./data")]
+    #[arg(short, long, default_value = "./data")]
     data_dir: String,
 }
 

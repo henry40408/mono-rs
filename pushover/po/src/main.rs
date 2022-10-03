@@ -44,50 +44,50 @@ use pushover::{Attachment, Monospace, Notification, Priority, Sound, HTML};
 
 #[doc(hidden)]
 #[derive(Parser)]
-#[clap(about, author, version)]
+#[command(about, author, version)]
 struct Opts {
     /// Your application's API token. <https://pushover.net/api#identifiers>
-    #[clap(short, long, env = "PUSHOVER_TOKEN")]
+    #[arg(short, long, env = "PUSHOVER_TOKEN")]
     token: String,
     /// The user / group key (not e-mail address) of your user (or you). <https://pushover.net/api#identifiers>
-    #[clap(short, long, env = "PUSHOVER_USER")]
+    #[arg(short, long, env = "PUSHOVER_USER")]
     user: String,
     /// Your message. <https://pushover.net/api#messages>
-    #[clap(short, long)]
+    #[arg(short, long)]
     message: String,
     /// Verbose.
-    #[clap(short, long)]
+    #[arg(short, long)]
     verbose: bool,
     /// To enable HTML formatting. monospace may not be used if html is used, and vice versa. <https://pushover.net/api#html>
-    #[clap(long)]
+    #[arg(long)]
     html: bool,
     /// To enable monospace messages. monospace may not be used if html is used, and vice versa. <https://pushover.net/api#html>
-    #[clap(long)]
+    #[arg(long)]
     monospace: bool,
     /// Your user's device name to send the message directly to that device, rather than all of the user's devices. <https://pushover.net/api#identifiers>
-    #[clap(long)]
+    #[arg(long)]
     device: Option<String>,
     /// Your message's title, otherwise your app's name is used. <https://pushover.net/api#messages>
-    #[clap(long)]
+    #[arg(long)]
     title: Option<String>,
     /// A Unix timestamp of your message's date and time to display to the user, rather than the time your message is received by our API. <https://pushover.net/api#timestamp>
-    #[clap(long)]
+    #[arg(long)]
     timestamp: Option<u64>,
     /// Attach file as notification attachment.
-    #[clap(short, long)]
+    #[arg(short, long)]
     file: Option<PathBuf>,
     /// Messages may be sent with a different priority that affects how the message is presented to the user
     /// e.g. -2, -1, 0, 1, 2, lowest, low, normal, high, emergency. <https://pushover.net/api#priority>
-    #[clap(long, allow_hyphen_values = true)]
+    #[arg(long, allow_hyphen_values = true)]
     priority: Option<String>,
     /// Users can choose from a number of different default sounds to play when receiving notifications. <https://pushover.net/api#sounds>
-    #[clap(long)]
+    #[arg(long)]
     sound: Option<String>,
     /// A supplementary URL to show with your message. <https://pushover.net/api#urls>
-    #[clap(long)]
+    #[arg(long)]
     url: Option<String>,
     /// A title for your supplementary URL, otherwise just the URL is shown. <https://pushover.net/api#urls>
-    #[clap(long)]
+    #[arg(long)]
     url_title: Option<String>,
 }
 
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_negative_priority() {
-        let parsed: Opts = Opts::from_iter(vec![
+        let parsed: Opts = Opts::try_parse_from(vec![
             "--",
             "-t",
             "token",
@@ -159,10 +159,11 @@ mod tests {
             "message",
             "--priority",
             "-2",
-        ]);
+        ])
+        .unwrap();
         assert_eq!(parsed.priority, Some("-2".to_string()));
 
-        let parsed: Opts = Opts::from_iter(vec![
+        let parsed: Opts = Opts::try_parse_from(vec![
             "--",
             "-t",
             "token",
@@ -172,7 +173,8 @@ mod tests {
             "message",
             "--priority",
             "-1",
-        ]);
+        ])
+        .unwrap();
         assert_eq!(parsed.priority, Some("-1".to_string()));
     }
 }

@@ -12,9 +12,10 @@ publish = false
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", default-features = false }
-clap = { version = "3", default-features = false, features = [
+clap = { version = "4", default-features = false, features = [
   "derive",
   "env",
+  "help",
   "std",
 ] }
 cloudflare = { version = "0.9.1", default-features = false } # use API response structs only

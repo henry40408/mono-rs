@@ -27,22 +27,22 @@ use cdu::{Cdu, NoIPV4};
 
 /// Argument parser
 #[derive(Debug, Parser)]
-#[clap(about, author, version)]
+#[command(about, author, version)]
 pub struct Opts {
     /// Cloudflare token
-    #[clap(short, long, env = "CLOUDFLARE_TOKEN")]
+    #[arg(short, long, env = "CLOUDFLARE_TOKEN")]
     pub token: String,
     /// Cloudflare zone name
-    #[clap(short, long, env = "CLOUDFLARE_ZONE")]
+    #[arg(short, long, env = "CLOUDFLARE_ZONE")]
     pub zone: String,
     /// Cloudflare records separated with comma e.g. a.x.com,b.x.com
-    #[clap(short, long, env = "CLOUDFLARE_RECORDS")]
+    #[arg(short, long, env = "CLOUDFLARE_RECORDS")]
     pub records: String,
     /// Daemon mode
-    #[clap(short, long, env = "DAEMON")]
+    #[arg(short, long, env = "DAEMON")]
     pub daemon: bool,
     /// Cron. Only in effect in daemon mode
-    #[clap(short, long, default_value = "0 */5 * * * * *", env = "CRON")]
+    #[arg(short, long, default_value = "0 */5 * * * * *", env = "CRON")]
     pub cron: String,
 }
 
