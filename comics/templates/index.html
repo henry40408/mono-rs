@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>Comics</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Courier New', Courier, monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <div>
+    <center>
+      <a href="/refresh">Refresh</a> | {{ comics.len() }} comic(s) loaded @ {{ updated }}
+    </center>
+  </div>
+  {% for comic in comics %}
+  <div>
+    <a href="/comic/{{ comic.name }}">
+      <center>
+        <img src="/static/{{ comic.cover.display() | urlencode }}" />
+      </center>
+      <center>{{ comic.name }}</center>
+    </a>
+  </div>
+  {% endfor %}
+</body>
+
+</html>
