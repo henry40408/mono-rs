@@ -39,7 +39,7 @@ pub struct Opts {
     #[arg(short, long, env = "CLOUDFLARE_RECORDS")]
     pub records: String,
     /// Daemon mode
-    #[arg(short, long, env = "DAEMON")]
+    #[arg(short, long, env = "DAEMON", action = clap::ArgAction::SetTrue)]
     pub daemon: bool,
     /// Cron. Only in effect in daemon mode
     #[arg(short, long, default_value = "0 */5 * * * * *", env = "CRON")]
@@ -122,4 +122,15 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn t_daemon_mode() {
+        let opts = Opts::try_parse_from(vec!["--", "--daemon"]).unwrap();
+        assert!(opts.daemon);
+    }
 }
