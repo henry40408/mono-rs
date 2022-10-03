@@ -22,6 +22,11 @@
 
 > wfs supports Unix platform only
 
+## Stability
+
+- Crates in this repository will not be published to crates.io because I don't have much time to maintain compatibility.
+- [Specifying dependencies from `git` repositories](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories) is suggested.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
