@@ -12,9 +12,10 @@ publish = false
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-clap = { version = "3", default-features = false, features = [
+clap = { version = "4", default-features = false, features = [
   "derive",
   "env",
+  "help",
   "std",
 ] }
 cron = "0.12"

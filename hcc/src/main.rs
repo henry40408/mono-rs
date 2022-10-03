@@ -15,7 +15,7 @@
 use std::{borrow::Cow, time::Duration};
 
 use chrono::Utc;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 use cron::Schedule;
 use hcc::Checker;
@@ -23,47 +23,45 @@ use log::debug;
 use pushover::{send_notification, NotificationError};
 
 #[derive(Debug, Default, Parser)]
-#[clap(author, about, version)]
+#[command(author, about, version)]
 struct Opts {
     /// ASCII
-    #[clap(long)]
+    #[arg(long)]
     ascii: bool,
     /// Verbose mode
-    #[clap(short, long)]
+    #[arg(short, long)]
     verbose: bool,
     /// Grace period in days
-    #[clap(short, long = "grace", default_value = "7")]
+    #[arg(short, long = "grace", default_value = "7")]
     grace_in_days: i64,
     /// Pushover token
-    #[clap(long, env = "PUSHOVER_TOKEN")]
+    #[arg(long, env = "PUSHOVER_TOKEN")]
     pushover_token: Option<String>,
     /// Pushover user
-    #[clap(long, env = "PUSHOVER_USER")]
+    #[arg(long, env = "PUSHOVER_USER")]
     pushover_user: Option<String>,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: Option<Commands>,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Subcommand)]
 enum Commands {
     /// Check domain name(s) immediately
-    #[clap()]
     Check {
         /// Send notification
-        #[clap(long)]
+        #[arg(long)]
         notify: bool,
         /// One or many domain names to check
-        #[clap()]
+        #[arg()]
         domain_names: Vec<String>,
     },
     /// Daemon
-    #[clap()]
     Daemon {
         /// Cron
-        #[clap(short, long, default_value = "0 0 0 * * *")]
+        #[arg(short, long, default_value = "0 0 0 * * *")]
         cron: String,
         /// One or many domain names to check
-        #[clap(env = "DOMAIN_NAMES")]
+        #[arg(env = "DOMAIN_NAMES")]
         domain_names: Vec<String>,
     },
 }
@@ -99,7 +97,7 @@ where
     client.elapsed = opts.verbose;
     client.grace_in_days = opts.grace_in_days;
 
-    let results = client.check_many(&domain_names).await;
+    let results = client.check_many(domain_names).await;
     let mut tasks = vec![];
     for result in results.iter() {
         println!("{result}");
