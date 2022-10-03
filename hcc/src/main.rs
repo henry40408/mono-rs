@@ -97,7 +97,7 @@ where
     client.elapsed = opts.verbose;
     client.grace_in_days = opts.grace_in_days;
 
-    let results = client.check_many(&domain_names).await;
+    let results = client.check_many(domain_names).await;
     let mut tasks = vec![];
     for result in results.iter() {
         println!("{result}");

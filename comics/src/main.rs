@@ -105,7 +105,7 @@ where
             if metadata.is_symlink() {
                 continue;
             }
-            let path = match diff_paths(file.path().to_path_buf(), data_dir) {
+            let path = match diff_paths(&file.path(), data_dir) {
                 Some(p) => p,
                 None => continue,
             };
@@ -184,7 +184,7 @@ async fn main() -> anyhow::Result<()> {
                 Ok(s) => s,
                 Err(e) => {
                     error!("{e}");
-                    format!("failed to render template").into()
+                    "failed to render template".to_string()
                 }
             };
             warp::reply::html(html)
@@ -233,10 +233,10 @@ async fn main() -> anyhow::Result<()> {
                 Ok(s) => warp::reply::with_status(warp::reply::html(s), StatusCode::OK),
                 Err(e) => {
                     error!("{e}");
-                    return warp::reply::with_status(
+                    warp::reply::with_status(
                         warp::reply::html("".into()),
                         StatusCode::INTERNAL_SERVER_ERROR,
-                    );
+                    )
                 }
             }
         },
