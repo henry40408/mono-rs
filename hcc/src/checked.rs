@@ -120,7 +120,10 @@ impl<'a> Checked<'a> {
             } => {
                 let domain_name = &self.domain_name;
                 let days = days.to_formatted_string(&Locale::en);
-                let r = Utc.timestamp(not_after, 0).to_rfc3339();
+                let r = match Utc.timestamp_opt(not_after, 0).single() {
+                    Some(t) => t.to_rfc3339(),
+                    None => "invalid".to_string(),
+                };
                 format!("{domain_name} cert expires in {days} days ({r})").into()
             }
             CertificateState::Expired => format!("{domain_name} cert expired").into(),
