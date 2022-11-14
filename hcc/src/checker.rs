@@ -119,6 +119,8 @@ impl Checker {
     where
         T: Into<Cow<'a, str>>,
     {
+        use anyhow::Error;
+
         let domain_name = domain_name.into();
         let server_name = ServerName::try_from(domain_name.as_ref())?;
         let mut conn = rustls::ClientConnection::new(self.config.clone(), server_name)?;
@@ -141,7 +143,18 @@ impl Checker {
         let certificate = certificates.first().context("no peer certificate found")?;
 
         let (_, cert) = parse_x509_certificate(certificate.as_ref())?;
-        let not_after = Utc.timestamp(cert.validity().not_after.timestamp(), 0);
+        let not_after = match Utc
+            .timestamp_opt(cert.validity().not_after.timestamp(), 0)
+            .single()
+        {
+            Some(t) => t,
+            None => {
+                return Ok(Checked::error(
+                    domain_name,
+                    Error::msg("timestamp is out of range"),
+                ))
+            }
+        };
 
         let days = (not_after - self.checked_at).num_days();
         let not_after = not_after.timestamp();

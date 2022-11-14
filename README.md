@@ -15,7 +15,7 @@
 
 ## Toolchain & Targets
 
-![rust](https://img.shields.io/badge/rust-1.64.0%20|%20stable%20|%20nightly-blue)
+![rust](https://img.shields.io/badge/rust-1.65.0%20|%20stable%20|%20nightly-blue)
 ![arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue)
 ![os](https://img.shields.io/badge/os-linux%20%7C%20macos%20%7C%20windows-blue)
 ![libc](https://img.shields.io/badge/libc-gnu%20%7C%20musl%20%7C%20msvc-blue)
