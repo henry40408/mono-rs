@@ -25,11 +25,19 @@ use cloudflare::framework::response::ApiSuccess;
 use log::{debug, Level};
 use logging_timer::{finish, stimer};
 use moka::sync::Cache;
-use tokio::task::JoinHandle;
 use ureq::{Agent, AgentBuilder};
 
-const API_HOST: &str = "https://api.cloudflare.com";
 const HTTP_TIMEOUT: u64 = 30;
+
+#[cfg(not(test))]
+fn server_url() -> String {
+    "https://api.cloudflare.com".to_string()
+}
+
+#[cfg(test)]
+fn server_url() -> String {
+    mockito::server_url()
+}
 
 /// Cannot fetch public IPv4 address
 #[derive(Clone, Copy, Debug)]
@@ -97,35 +105,64 @@ impl<'a> Cdu<'a> {
         }
     }
 
-    async fn get_zone_identifier(&self, agent: Arc<Agent>) -> anyhow::Result<String> {
-        let zone = &self.zone;
-        let token = &self.token;
-        let req = agent
-            .get(&format!("{API_HOST}/client/v4/zones"))
-            .set("accept", "application/json")
-            .set("authorization", &format!("bearer {token}"))
-            .query("name", &self.zone);
-        let tmr = stimer!(Level::Debug; "FETCH_ZONE", "zone {zone}");
-        let res: ApiSuccess<Vec<Zone>> = req.call()?.into_json()?;
-        let id = match res.result.first() {
-            Some(zone) => zone.id.to_string(),
-            None => bail!("zone not found: {zone}"),
-        };
-        finish!(tmr, "zone ID {id}");
-        Ok(id)
-    }
-
     fn build_agent(&self) -> Agent {
         AgentBuilder::new()
             .timeout(Duration::from_secs(HTTP_TIMEOUT))
             .build()
     }
 
+    async fn get_record_identifiers<T>(
+        &self,
+        agent: Arc<Agent>,
+        zone_id: T,
+        record_names: &[String],
+    ) -> anyhow::Result<Vec<(String, String)>>
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        let zone_id = zone_id.into();
+        let authorization = format!("bearer {}", &self.token);
+
+        let url = format!("{}/client/v4/zones/{zone_id}/dns_records", server_url());
+        let req = agent
+            .get(&url)
+            .set("content-type", "application/json")
+            .set("authorization", &authorization);
+        let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORDS", "zone_id={zone_id}");
+        let res: ApiSuccess<Vec<DnsRecord>> = req.call()?.into_json()?;
+        let mut identifiers = vec![];
+        for record in res.result {
+            if record_names.contains(&record.name) {
+                identifiers.push((record.id, record.name))
+            }
+        }
+        finish!(tmr, "count={}", identifiers.len());
+        Ok(identifiers)
+    }
+
+    async fn get_zone_identifier(&self, agent: Arc<Agent>) -> anyhow::Result<String> {
+        let zone = &self.zone;
+        let token = &self.token;
+        let req = agent
+            .get(&format!("{}/client/v4/zones", server_url()))
+            .set("accept", "application/json")
+            .set("authorization", &format!("bearer {token}"))
+            .query("name", &self.zone);
+        let tmr = stimer!(Level::Debug; "FETCH_ZONE", "zone={zone}");
+        let res: ApiSuccess<Vec<Zone>> = req.call()?.into_json()?;
+        let id = match res.result.first() {
+            Some(zone) => zone.id.to_string(),
+            None => bail!("zone not found: {zone}"),
+        };
+        finish!(tmr, "zone_id={id}");
+        Ok(id)
+    }
+
     /// Perform DNS record update on Cloudflare
     pub async fn run(&self) -> anyhow::Result<()> {
         let tmr = stimer!(Level::Debug; "FETCH_IP_ADDRESS");
         let current_ip = public_ip::addr_v4().await.ok_or(NoIPV4)?;
-        finish!(tmr, "public IP address {current_ip:?}");
+        finish!(tmr, "current_ip={current_ip:?}");
 
         if let Some(Cached::IP(last_ip)) = self.cache.get(&CacheKey::LastIP) {
             if current_ip == last_ip {
@@ -139,73 +176,125 @@ impl<'a> Cdu<'a> {
 
         let agent = Arc::new(self.build_agent());
         let zone_id = self.get_zone_identifier(agent.clone()).await?;
+        let record_identifiers = self
+            .get_record_identifiers(agent.clone(), &zone_id, &self.record_names)
+            .await?;
 
         let mut tasks = vec![];
-        for record_name in &self.record_names {
-            let agent = agent.clone();
-            let record_name = record_name.clone();
-            let zone_id = zone_id.clone();
-            let token = &self.token;
-            let authorization = format!("bearer {token}");
-            tasks.push(tokio::spawn(async move {
-                let url = format!("{API_HOST}/client/v4/zones/{zone_id}/dns_records");
-                let req = agent
-                    .get(&url)
-                    .query("name", &record_name)
-                    .set("content-type", "application/json")
-                    .set("authorization", &authorization);
-                let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORD", "DNS record {record_name}");
-                let res: ApiSuccess<Vec<DnsRecord>> = req.call()?.into_json()?;
-                let id = match res.result.first() {
-                    Some(dns_record) => dns_record.id.clone(),
-                    None => bail!("DNS record not found: {record_name}"),
-                };
-                finish!(tmr, "DNS record ID {id}");
-                Ok((id, record_name))
-            }));
-        }
-
-        let mut dns_record_ids = vec![];
-        for task in futures::future::join_all(tasks).await {
-            let (dns_record_id, record_name) = task??;
-            dns_record_ids.push((dns_record_id, record_name));
-        }
-
-        let mut tasks: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
-        for (dns_record_id, record_name) in dns_record_ids {
+        for (id, name) in record_identifiers {
             let agent = agent.clone();
             let zone_id = zone_id.clone();
-            let token = &self.token;
-            let authorization = format!("bearer {token}");
-            tasks.push(tokio::spawn(async move {
-                let url = format!("{API_HOST}/client/v4/zones/{zone_id}/dns_records/{dns_record_id}");
-                let req = agent.put(&url).set("authorization", &authorization);
-                let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORD", "DNS record {record_name} ({dns_record_id})");
-                let res:ApiSuccess<DnsRecord> = req.send_json(ureq::json!({
-                    "type": "A",
-                    "name": &record_name,
-                    "content": current_ip,
-                    "ttl": 1 // 1 for automatic
-                }))?.into_json()?;
-                let content = match res.result.content {
-                    DnsContent::A { content } => content.to_string(),
-                    _ => "(not an A record)".into(),
-                };
-                finish!(tmr, "content {}", &content);
-                Ok(())
-            }));
+            tasks.push(self.update_dns_record(agent, zone_id, id, name, current_ip));
         }
 
         let len = tasks.len();
-        let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORDS", "update {len} DNS records");
+        let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORDS", "started={len}");
         for task in futures::future::join_all(tasks).await {
-            task??;
+            task?;
         }
-        finish!(tmr);
+        finish!(tmr, "finished={len}");
 
         // save current IP address when update succeeds
         self.cache.insert(CacheKey::LastIP, Cached::IP(current_ip));
 
         Ok(())
+    }
+
+    async fn update_dns_record<T>(
+        &self,
+        agent: Arc<Agent>,
+        zone_id: T,
+        dns_record_id: T,
+        dns_record_name: T,
+        current_ip: Ipv4Addr,
+    ) -> anyhow::Result<()>
+    where
+        T: Into<Cow<'a, str>>,
+    {
+        let zone_id = zone_id.into();
+        let dns_record_name = dns_record_name.into();
+        let dns_record_id = dns_record_id.into();
+        let authorization = format!("bearer {}", &self.token);
+
+        let url = format!(
+            "{}/client/v4/zones/{zone_id}/dns_records/{dns_record_id}",
+            server_url()
+        );
+        let req = agent.put(&url).set("authorization", &authorization);
+        let tmr = stimer!(Level::Debug; "UPDATE_DNS_RECORD", "zone_id={zone_id},dns_record_id={dns_record_id}");
+        let res: ApiSuccess<DnsRecord> = req
+            .send_json(ureq::json!({
+                "type": "A",
+                "name":dns_record_name,
+                "content": current_ip,
+                "ttl": 1 // 1 for automatic
+            }))?
+            .into_json()?;
+        let content = match res.result.content {
+            DnsContent::A { content } => content.to_string(),
+            _ => "(not an A record)".into(),
+        };
+        finish!(tmr, "content={content}");
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use mockito::{mock, Matcher};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn t_get_record_identifiers() {
+        let _m = mock("GET", "/client/v4/zones/1/dns_records")
+            .with_status(200)
+            .with_body(r#"{"success":true,"result":[{"meta":{"auto_added":false},"locked":false,"name":"record","ttl":0,"zone_id":"1","modified_on":"1970-01-01T00:00:00Z","created_on":"1970-01-01T00:00:00Z","proxiable":false,"content":"0.0.0.0","type":"A","id":"2","proxied":false,"zone_name":"zone"}],"messages":[],"errors":[]}"#)
+            .create();
+        let cdu = Cdu::new("token", "zone", &["record"]);
+        let agent = Arc::new(cdu.build_agent());
+        let identifiers = cdu
+            .get_record_identifiers(agent.clone(), "1", &["record".into()])
+            .await
+            .unwrap();
+        assert_eq!(1, identifiers.len());
+
+        let (record_id, record_name) = identifiers.first().unwrap();
+        assert_eq!(record_id, "2");
+        assert_eq!(record_name, "record");
+    }
+
+    #[tokio::test]
+    async fn t_get_zone_identifier() {
+        let _m = mock("GET", "/client/v4/zones")
+            .match_query(Matcher::UrlEncoded("name".into(), "zone".into()))
+            .with_status(200)
+            .with_body(r#"{"success":true,"result":[{"id":"1","name":"zone","account":{"id":"2","name":"a"},"created_on":"1970-01-01T00:00:00Z","development_mode":0,"meta":{"custom_certificate_quota":0,"page_rule_quota":0,"phishing_detected":false,"multiple_railguns_allowed":false},"modified_on":"1970-01-01T00:00:00Z","name_servers":[],"owner":{"type":"user","email":"","id":""},"paused":false,"permissions":[],"status":"active","type":"full"}],"messages":[],"errors":[]}"#)
+            .create();
+        let cdu = Cdu::new("token", "zone", &["record"]);
+        let agent = Arc::new(cdu.build_agent());
+        let zone_identifier = cdu.get_zone_identifier(agent.clone()).await.unwrap();
+        assert_eq!(zone_identifier, "1");
+    }
+
+    #[tokio::test]
+    async fn t_update_dns_record() {
+        let _m2 = mock("PUT", "/client/v4/zones/1/dns_records/2")
+            .match_body(r#"{"content":"127.0.0.1","name":"record","ttl":1,"type":"A"}"#)
+            .with_status(200)
+            .with_body(r#"{"success":true,"result":{"meta":{"auto_added":false},"locked":false,"name":"record","ttl":0,"zone_id":"1","modified_on":"1970-01-01T00:00:00Z","created_on":"1970-01-01T00:00:00Z","proxiable":false,"content":"0.0.0.0","type":"A","id":"2","proxied":false,"zone_name":"zone"},"messages":[],"errors":[]}"#)
+            .create();
+        let cdu = Cdu::new("token", "zone", &["record"]);
+        let agent = Arc::new(cdu.build_agent());
+        cdu.update_dns_record(
+            agent.clone(),
+            "1",
+            "2",
+            "record",
+            "127.0.0.1".parse().unwrap(),
+        )
+        .await
+        .unwrap();
     }
 }
