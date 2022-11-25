@@ -27,8 +27,11 @@ log = "0.4"
 logging_timer = "1"
 moka = { version = "0.9", default-features = false, features = ["sync"] }
 public-ip = { version = "0.2", default-features = false, features = [
-  "opendns",
-  "tokio-dns-resolver",
+  "ipify-org",
+  "tokio-http-resolver",
 ] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 ureq = { version = "2", features = ["json"] }
+
+[dev-dependencies]
+mockito = "0.31"
