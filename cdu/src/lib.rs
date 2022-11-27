@@ -70,6 +70,37 @@ impl Display for Cached {
     }
 }
 
+async fn get_record_identifier<'a, T>(
+    agent: Arc<Agent>,
+    token: T,
+    zone_id: T,
+    record_name: T,
+) -> anyhow::Result<(String, String)>
+where
+    T: Into<Cow<'a, str>>,
+{
+    let token = token.into();
+    let authorization = format!("bearer {}", token);
+
+    let zone_id = zone_id.into();
+    let record_name = record_name.into();
+
+    let url = format!("{}/client/v4/zones/{zone_id}/dns_records", server_url());
+    let req = agent
+        .get(&url)
+        .query("name", &record_name)
+        .set("content-type", "application/json")
+        .set("authorization", &authorization);
+    let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORD", "zone_id={zone_id}");
+    let res: ApiSuccess<Vec<DnsRecord>> = req.call()?.into_json()?;
+    let identifier = match res.result.first() {
+        Some(record) => record.id.clone(),
+        None => bail!("DNS record not found: {record_name}"),
+    };
+    finish!(tmr, "id={identifier}");
+    Ok((identifier, record_name.into()))
+}
+
 async fn update_dns_record<'a, T>(
     agent: Arc<Agent>,
     token: T,
@@ -152,35 +183,6 @@ impl<'a> Cdu<'a> {
             .build()
     }
 
-    async fn get_record_identifiers<T>(
-        &self,
-        agent: Arc<Agent>,
-        zone_id: T,
-        record_names: &[String],
-    ) -> anyhow::Result<Vec<(String, String)>>
-    where
-        T: Into<Cow<'a, str>>,
-    {
-        let zone_id = zone_id.into();
-        let authorization = format!("bearer {}", &self.token);
-
-        let url = format!("{}/client/v4/zones/{zone_id}/dns_records", server_url());
-        let req = agent
-            .get(&url)
-            .set("content-type", "application/json")
-            .set("authorization", &authorization);
-        let tmr = stimer!(Level::Debug; "FETCH_DNS_RECORDS", "zone_id={zone_id}");
-        let res: ApiSuccess<Vec<DnsRecord>> = req.call()?.into_json()?;
-        let mut identifiers = vec![];
-        for record in res.result {
-            if record_names.contains(&record.name) {
-                identifiers.push((record.id, record.name))
-            }
-        }
-        finish!(tmr, "count={}", identifiers.len());
-        Ok(identifiers)
-    }
-
     async fn get_zone_identifier(&self, agent: Arc<Agent>) -> anyhow::Result<String> {
         let zone = &self.zone;
         let token = &self.token;
@@ -219,9 +221,23 @@ impl<'a> Cdu<'a> {
 
         let agent = Arc::new(self.build_agent());
         let zone_id = self.get_zone_identifier(agent.clone()).await?;
-        let record_identifiers = self
-            .get_record_identifiers(agent.clone(), &zone_id, &self.record_names)
-            .await?;
+
+        let mut tasks = FuturesUnordered::new();
+        for record_name in &self.record_names {
+            let agent = agent.clone();
+            let token = self.token.to_string();
+            let zone_id = zone_id.clone();
+            let record_name = record_name.clone();
+            tasks.push(tokio::spawn(async move {
+                get_record_identifier(agent, token, zone_id.into(), record_name.into()).await
+            }))
+        }
+
+        let mut record_identifiers = vec![];
+        while let Some(task) = tasks.next().await {
+            let (id, name) = task??;
+            record_identifiers.push((id, name));
+        }
 
         let mut tasks = FuturesUnordered::new();
         for (id, name) in record_identifiers {
@@ -229,7 +245,7 @@ impl<'a> Cdu<'a> {
             let token = self.token.to_string();
             let zone_id = zone_id.clone();
             tasks.push(tokio::spawn(async move {
-                update_dns_record(agent, token, zone_id, id, name, current_ip).await
+                update_dns_record(agent, token.into(), zone_id, id, name, current_ip).await
             }));
         }
 
@@ -255,22 +271,19 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
-    async fn t_get_record_identifiers() {
+    async fn t_get_record_identifier() {
         let _m = mock("GET", "/client/v4/zones/1/dns_records")
+            .match_query(Matcher::UrlEncoded("name".into(), "record".into()))
             .with_status(200)
             .with_body(r#"{"success":true,"result":[{"meta":{"auto_added":false},"locked":false,"name":"record","ttl":0,"zone_id":"1","modified_on":"1970-01-01T00:00:00Z","created_on":"1970-01-01T00:00:00Z","proxiable":false,"content":"0.0.0.0","type":"A","id":"2","proxied":false,"zone_name":"zone"}],"messages":[],"errors":[]}"#)
             .create();
         let cdu = Cdu::new("token", "zone", &["record"]);
         let agent = Arc::new(cdu.build_agent());
-        let identifiers = cdu
-            .get_record_identifiers(agent.clone(), "1", &["record".into()])
+        let (id, record_name) = get_record_identifier(agent.clone(), "token", "1", "record")
             .await
             .unwrap();
-        assert_eq!(1, identifiers.len());
-
-        let (record_id, record_name) = identifiers.first().unwrap();
-        assert_eq!(record_id, "2");
-        assert_eq!(record_name, "record");
+        assert_eq!("2", id);
+        assert_eq!("record", record_name);
     }
 
     #[tokio::test]
