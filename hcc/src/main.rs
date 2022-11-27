@@ -16,18 +16,22 @@ use std::{borrow::Cow, time::Duration};
 
 use chrono::Utc;
 use clap::{Parser, Subcommand};
-
 use cron::Schedule;
-use hcc::Checker;
+use futures::stream::FuturesUnordered;
+use hcc::{Checked, Checker};
 use log::debug;
+use once_cell::sync::OnceCell;
 use pushover::{send_notification, NotificationError};
+use supports_unicode::Stream;
+
+fn get_opts() -> &'static Opts {
+    static INSTANCE: OnceCell<Opts> = OnceCell::new();
+    INSTANCE.get_or_init(Opts::parse)
+}
 
 #[derive(Debug, Default, Parser)]
 #[command(author, about, version)]
 struct Opts {
-    /// ASCII
-    #[arg(long)]
-    ascii: bool,
     /// Verbose mode
     #[arg(short, long)]
     verbose: bool,
@@ -66,6 +70,33 @@ enum Commands {
     },
 }
 
+struct CheckedString<'a>(&'a Checked<'a>);
+
+impl<'a> std::fmt::Display for CheckedString<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let domain_name = &self.0.domain_name;
+        let is_unicode = supports_unicode::on(Stream::Stdout);
+        if let Some(error) = &self.0.error {
+            let icon = if is_unicode { "\u{274c}" } else { "[x]" };
+            write!(f, "{icon} failed to check {domain_name}: {error}")
+        } else if let Some(not_after) = self.0.not_after {
+            let icon = if is_unicode {
+                "\u{2714}\u{fe0f}"
+            } else {
+                "[v]"
+            };
+            let not_after = not_after.to_rfc3339();
+            write!(
+                f,
+                "{icon} certificate of {domain_name} is valid until {not_after}"
+            )
+        } else {
+            let icon = if is_unicode { "\u{274c}" } else { "[x]" };
+            write!(f, "{icon} certificate of {domain_name} expired")
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
@@ -92,20 +123,26 @@ async fn check_command<T>(
 where
     T: AsRef<str>,
 {
+    use futures::StreamExt as _;
+
     let mut client = Checker::default();
-    client.ascii = opts.ascii;
-    client.elapsed = opts.verbose;
     client.grace_in_days = opts.grace_in_days;
 
-    let results = client.check_many(domain_names).await;
-    let mut tasks = vec![];
+    let results = client.check_many(domain_names).await?;
+
+    let mut tasks = FuturesUnordered::new();
     for result in results.iter() {
+        let result = CheckedString(result).to_string();
         println!("{result}");
         if should_notify {
-            tasks.push(notify(opts, result.to_string()));
+            tasks.push(tokio::spawn(async move { notify(result).await }));
         }
     }
-    futures::future::join_all(tasks).await;
+
+    while let Some(task) = tasks.next().await {
+        task??;
+    }
+
     Ok(())
 }
 
@@ -114,11 +151,10 @@ where
     T: AsRef<str>,
     U: AsRef<str> + std::fmt::Debug,
 {
+    use futures::StreamExt as _;
     use std::str::FromStr as _;
 
     let mut client = Checker::default();
-    client.ascii = opts.ascii;
-    client.elapsed = opts.verbose;
     client.grace_in_days = opts.grace_in_days;
 
     let cron = cron.as_ref();
@@ -133,28 +169,34 @@ where
         }
 
         debug!("check {domain_names:?}");
-        let results = client.check_many(domain_names).await;
-        let mut tasks = vec![];
+        let results = client.check_many(domain_names).await?;
+
+        let mut tasks = FuturesUnordered::new();
         for result in results.iter() {
+            let result = CheckedString(result).to_string();
             debug!("{result}");
-            tasks.push(notify(opts, result.to_string()));
+            tasks.push(tokio::spawn(async move { notify(result).await }));
         }
-        futures::future::join_all(tasks).await;
+
+        while let Some(task) = tasks.next().await {
+            task??;
+        }
     }
     Ok(())
 }
 
-fn get_pushover_config(opts: &'_ Opts) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+fn get_pushover_config<'a>() -> Option<(Cow<'a, str>, Cow<'a, str>)> {
+    let opts = get_opts();
     let t = opts.pushover_token.as_ref()?;
     let u = opts.pushover_user.as_ref()?;
     Some((t.into(), u.into()))
 }
 
-async fn notify<'a, T>(opts: &Opts, message: T) -> Result<(), NotificationError>
+async fn notify<'a, T>(message: T) -> Result<(), NotificationError>
 where
     T: Into<Cow<'a, str>> + std::fmt::Debug,
 {
-    let (token, user) = match get_pushover_config(opts) {
+    let (token, user) = match get_pushover_config() {
         Some((t, u)) => (t, u),
         None => return Ok(()),
     };
