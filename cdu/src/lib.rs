@@ -229,7 +229,7 @@ impl<'a> Cdu<'a> {
             let zone_id = zone_id.clone();
             let record_name = record_name.clone();
             tasks.push(tokio::spawn(async move {
-                get_record_identifier(agent, token, zone_id.into(), record_name.into()).await
+                get_record_identifier(agent, token, zone_id, record_name).await
             }))
         }
 
@@ -245,7 +245,7 @@ impl<'a> Cdu<'a> {
             let token = self.token.to_string();
             let zone_id = zone_id.clone();
             tasks.push(tokio::spawn(async move {
-                update_dns_record(agent, token.into(), zone_id, id, name, current_ip).await
+                update_dns_record(agent, token, zone_id, id, name, current_ip).await
             }));
         }
 
