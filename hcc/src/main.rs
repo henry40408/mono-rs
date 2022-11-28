@@ -12,6 +12,7 @@
 
 //! HTTPS Certificate Check
 
+use std::fmt::Display;
 use std::{borrow::Cow, time::Duration};
 
 use chrono::Utc;
@@ -70,26 +71,36 @@ enum Commands {
     },
 }
 
-struct CheckedString<'a>(&'a Checked<'a>);
+struct CheckedString<'a> {
+    inner: &'a Checked<'a>,
+    grace_in_days: i64,
+}
 
-impl<'a> std::fmt::Display for CheckedString<'a> {
+impl<'a> Display for CheckedString<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let domain_name = &self.0.domain_name;
         let is_unicode = supports_unicode::on(Stream::Stdout);
-        match &self.0.inner {
+        let domain_name = &self.inner.domain_name;
+        let grace = chrono::Duration::days(self.grace_in_days);
+        match &self.inner.inner {
             CheckedInner::Ok { not_after, .. } => {
-                if not_after > &self.0.checked_at {
+                if not_after > &(self.inner.checked_at + grace) {
                     let icon = if is_unicode { "\u{2705}" } else { "[v]" };
+                    write!(f, "{icon} {domain_name} expires at {not_after}")
+                } else if not_after > &self.inner.checked_at {
+                    let icon = if is_unicode {
+                        "\u{26a0}\u{fe0f}"
+                    } else {
+                        "[!]"
+                    };
+                    let duration = *not_after - self.inner.checked_at;
+                    let days = duration.num_days();
                     write!(
                         f,
-                        "{icon} {domain_name} expires at {not_after}"
+                        "{icon} {domain_name} expires in {days} day(s) at {not_after}"
                     )
                 } else {
                     let icon = if is_unicode { "\u{274c}" } else { "[x]" };
-                    write!(
-                        f,
-                        "{icon} {domain_name} expired at {not_after}"
-                    )
+                    write!(f, "{icon} {domain_name} expired at {not_after}")
                 }
             }
             CheckedInner::Error { error } => {
@@ -128,14 +139,16 @@ where
 {
     use futures::StreamExt as _;
 
-    let mut client = Checker::default();
-    client.grace_in_days = opts.grace_in_days;
-
+    let client = Checker::default();
     let results = client.check_many(domain_names).await?;
 
     let mut tasks = FuturesUnordered::new();
     for result in results.iter() {
-        let result = CheckedString(result).to_string();
+        let result = CheckedString {
+            inner: result,
+            grace_in_days: opts.grace_in_days,
+        }
+        .to_string();
         println!("{result}");
         if should_notify {
             tasks.push(tokio::spawn(async move { notify(result).await }));
@@ -157,11 +170,11 @@ where
     use futures::StreamExt as _;
     use std::str::FromStr as _;
 
-    let mut client = Checker::default();
-    client.grace_in_days = opts.grace_in_days;
+    let client = Checker::default();
 
     let cron = cron.as_ref();
     let schedule = Schedule::from_str(cron)?;
+
     for next in schedule.upcoming(Utc) {
         debug!("check certificates of {domain_names:?} at {next:?}");
         loop {
@@ -176,7 +189,11 @@ where
 
         let mut tasks = FuturesUnordered::new();
         for result in results.iter() {
-            let result = CheckedString(result).to_string();
+            let result = CheckedString {
+                inner: result,
+                grace_in_days: opts.grace_in_days,
+            }
+            .to_string();
             debug!("{result}");
             tasks.push(tokio::spawn(async move { notify(result).await }));
         }
@@ -185,6 +202,7 @@ where
             task??;
         }
     }
+
     Ok(())
 }
 
@@ -197,15 +215,16 @@ fn get_pushover_config<'a>() -> Option<(Cow<'a, str>, Cow<'a, str>)> {
 
 async fn notify<'a, T>(message: T) -> Result<(), NotificationError>
 where
-    T: Into<Cow<'a, str>> + std::fmt::Debug,
+    T: Into<Cow<'a, str>>,
 {
+    let message = message.into();
     let (token, user) = match get_pushover_config() {
         Some((t, u)) => (t, u),
         None => return Ok(()),
     };
-    debug!("send pushover notification {:?}", message);
-    let res = send_notification(token, user, message.into()).await?;
-    debug!("pushover response {:?}", res);
+    debug!("send pushover notification {message:?}");
+    let res = send_notification(token, user, message).await?;
+    debug!("pushover response {res:?}");
     Ok(())
 }
 

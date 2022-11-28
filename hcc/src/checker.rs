@@ -1,8 +1,9 @@
+use std::borrow::Cow;
+use std::fmt;
 use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
-use std::{borrow::Cow, fmt};
 
 use anyhow::Context as _;
 use chrono::{TimeZone, Utc};
@@ -97,15 +98,11 @@ impl ServerCertVerifier for SkipServerVerification {
 /// Checker for SSL certificate
 pub struct Checker {
     config: Arc<ClientConfig>,
-    /// Grace period before certificate actually expires
-    pub grace_in_days: i64,
 }
 
 impl fmt::Debug for Checker {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Checker")
-            .field("grace_in_days", &self.grace_in_days)
-            .finish()
+        f.debug_struct("Checker").finish()
     }
 }
 
@@ -127,7 +124,6 @@ impl Default for Checker {
 
         Checker {
             config: Arc::new(config),
-            grace_in_days: 7,
         }
     }
 }
