@@ -8,6 +8,7 @@ use std::time::{Instant, SystemTime};
 use anyhow::Context as _;
 use chrono::{TimeZone, Utc};
 use futures::stream::FuturesOrdered;
+use log::debug;
 use rustls::client::{ServerCertVerified, ServerCertVerifier};
 use rustls::{Certificate, ClientConfig, OwnedTrustAnchor, ServerName};
 use x509_parser::parse_x509_certificate;
@@ -176,14 +177,17 @@ impl Checker {
             let config = self.config.clone();
             let domain_name = domain_name.as_ref().to_string();
             tasks.push_back(tokio::spawn(async move {
-                match do_check_one(config, domain_name.clone()) {
+                debug!("check {domain_name}");
+                let checked = match do_check_one(config, domain_name.clone()) {
                     Ok(c) => c,
                     Err(error) => Checked {
                         checked_at: now,
                         domain_name: domain_name.into(),
                         inner: CheckedInner::Error { error },
                     },
-                }
+                };
+                debug!("{} checked", checked.domain_name);
+                checked
             }));
         }
 
