@@ -80,11 +80,7 @@ impl<'a> std::fmt::Display for CheckedString<'a> {
             let icon = if is_unicode { "\u{274c}" } else { "[x]" };
             write!(f, "{icon} failed to check {domain_name}: {error}")
         } else if let Some(not_after) = self.0.not_after {
-            let icon = if is_unicode {
-                "\u{2714}\u{fe0f}"
-            } else {
-                "[v]"
-            };
+            let icon = if is_unicode { "\u{2705}" } else { "[v]" };
             let not_after = not_after.to_rfc3339();
             write!(
                 f,
