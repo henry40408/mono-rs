@@ -12,22 +12,27 @@
 
 //! HTTPS Certificate Check
 
+use std::fmt::Display;
 use std::{borrow::Cow, time::Duration};
 
 use chrono::Utc;
 use clap::{Parser, Subcommand};
-
 use cron::Schedule;
-use hcc::Checker;
+use futures::stream::FuturesUnordered;
+use hcc::{Checked, CheckedInner, Checker};
 use log::debug;
+use once_cell::sync::OnceCell;
 use pushover::{send_notification, NotificationError};
+use supports_unicode::Stream;
+
+fn get_opts() -> &'static Opts {
+    static INSTANCE: OnceCell<Opts> = OnceCell::new();
+    INSTANCE.get_or_init(Opts::parse)
+}
 
 #[derive(Debug, Default, Parser)]
 #[command(author, about, version)]
 struct Opts {
-    /// ASCII
-    #[arg(long)]
-    ascii: bool,
     /// Verbose mode
     #[arg(short, long)]
     verbose: bool,
@@ -66,6 +71,46 @@ enum Commands {
     },
 }
 
+struct CheckedString<'a> {
+    inner: &'a Checked<'a>,
+    grace_in_days: i64,
+}
+
+impl<'a> Display for CheckedString<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let is_unicode = supports_unicode::on(Stream::Stdout);
+        let domain_name = &self.inner.domain_name;
+        let grace = chrono::Duration::days(self.grace_in_days);
+        match &self.inner.inner {
+            CheckedInner::Ok { not_after, .. } => {
+                if not_after > &(self.inner.checked_at + grace) {
+                    let icon = if is_unicode { "\u{2705}" } else { "[v]" };
+                    write!(f, "{icon} {domain_name} expires at {not_after}")
+                } else if not_after > &self.inner.checked_at {
+                    let icon = if is_unicode {
+                        "\u{26a0}\u{fe0f}"
+                    } else {
+                        "[!]"
+                    };
+                    let duration = *not_after - self.inner.checked_at;
+                    let days = duration.num_days();
+                    write!(
+                        f,
+                        "{icon} {domain_name} expires in {days} day(s) at {not_after}"
+                    )
+                } else {
+                    let icon = if is_unicode { "\u{274c}" } else { "[x]" };
+                    write!(f, "{icon} {domain_name} expired at {not_after}")
+                }
+            }
+            CheckedInner::Error { error } => {
+                let icon = if is_unicode { "\u{274c}" } else { "[x]" };
+                write!(f, "{icon} {domain_name}: {error}")
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
@@ -92,20 +137,28 @@ async fn check_command<T>(
 where
     T: AsRef<str>,
 {
-    let mut client = Checker::default();
-    client.ascii = opts.ascii;
-    client.elapsed = opts.verbose;
-    client.grace_in_days = opts.grace_in_days;
+    use futures::StreamExt as _;
 
-    let results = client.check_many(domain_names).await;
-    let mut tasks = vec![];
+    let client = Checker::default();
+    let results = client.check_many(domain_names).await?;
+
+    let mut tasks = FuturesUnordered::new();
     for result in results.iter() {
+        let result = CheckedString {
+            inner: result,
+            grace_in_days: opts.grace_in_days,
+        }
+        .to_string();
         println!("{result}");
         if should_notify {
-            tasks.push(notify(opts, result.to_string()));
+            tasks.push(tokio::spawn(async move { notify(result).await }));
         }
     }
-    futures::future::join_all(tasks).await;
+
+    while let Some(task) = tasks.next().await {
+        task??;
+    }
+
     Ok(())
 }
 
@@ -114,15 +167,14 @@ where
     T: AsRef<str>,
     U: AsRef<str> + std::fmt::Debug,
 {
+    use futures::StreamExt as _;
     use std::str::FromStr as _;
 
-    let mut client = Checker::default();
-    client.ascii = opts.ascii;
-    client.elapsed = opts.verbose;
-    client.grace_in_days = opts.grace_in_days;
+    let client = Checker::default();
 
     let cron = cron.as_ref();
     let schedule = Schedule::from_str(cron)?;
+
     for next in schedule.upcoming(Utc) {
         debug!("check certificates of {domain_names:?} at {next:?}");
         loop {
@@ -133,34 +185,46 @@ where
         }
 
         debug!("check {domain_names:?}");
-        let results = client.check_many(domain_names).await;
-        let mut tasks = vec![];
+        let results = client.check_many(domain_names).await?;
+
+        let mut tasks = FuturesUnordered::new();
         for result in results.iter() {
+            let result = CheckedString {
+                inner: result,
+                grace_in_days: opts.grace_in_days,
+            }
+            .to_string();
             debug!("{result}");
-            tasks.push(notify(opts, result.to_string()));
+            tasks.push(tokio::spawn(async move { notify(result).await }));
         }
-        futures::future::join_all(tasks).await;
+
+        while let Some(task) = tasks.next().await {
+            task??;
+        }
     }
+
     Ok(())
 }
 
-fn get_pushover_config(opts: &'_ Opts) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+fn get_pushover_config<'a>() -> Option<(Cow<'a, str>, Cow<'a, str>)> {
+    let opts = get_opts();
     let t = opts.pushover_token.as_ref()?;
     let u = opts.pushover_user.as_ref()?;
     Some((t.into(), u.into()))
 }
 
-async fn notify<'a, T>(opts: &Opts, message: T) -> Result<(), NotificationError>
+async fn notify<'a, T>(message: T) -> Result<(), NotificationError>
 where
-    T: Into<Cow<'a, str>> + std::fmt::Debug,
+    T: Into<Cow<'a, str>>,
 {
-    let (token, user) = match get_pushover_config(opts) {
+    let message = message.into();
+    let (token, user) = match get_pushover_config() {
         Some((t, u)) => (t, u),
         None => return Ok(()),
     };
-    debug!("send pushover notification {:?}", message);
-    let res = send_notification(token, user, message.into()).await?;
-    debug!("pushover response {:?}", res);
+    debug!("send pushover notification {message:?}");
+    let res = send_notification(token, user, message).await?;
+    debug!("pushover response {res:?}");
     Ok(())
 }
 
@@ -186,5 +250,23 @@ mod test {
         check_command(&opts, &["expired.badssl.com"], false)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn t_grace_in_days() {
+        let checker = Checker::default();
+        let checked = checker.check_one("sha256.badssl.com").await;
+        assert!(matches!(checked.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = checked.inner {
+            let duration = not_after - checked.checked_at;
+            let days = duration.num_days();
+            let grace_in_days = days + 1;
+            let result = CheckedString {
+                inner: &checked,
+                grace_in_days,
+            }
+            .to_string();
+            assert!(result.contains(&format!("expires in {days} day(s)")));
+        }
     }
 }

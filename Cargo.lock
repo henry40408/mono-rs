@@ -964,9 +964,11 @@ dependencies = [
  "futures",
  "log",
  "num-format",
+ "once_cell",
  "pretty_env_logger",
  "pushover",
  "rustls",
+ "supports-unicode",
  "tokio",
  "webpki",
  "webpki-roots",
@@ -2232,6 +2234,15 @@ dependencies = [
  "quote",
  "rustversion",
  "syn",
+]
+
+[[package]]
+name = "supports-unicode"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8b945e45b417b125a8ec51f1b7df2f8df7920367700d1f98aedd21e5735f8b2"
+dependencies = [
+ "atty",
 ]
 
 [[package]]

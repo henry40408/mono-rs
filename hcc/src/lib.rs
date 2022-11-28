@@ -12,7 +12,7 @@
 
 //! HTTPS Certificate Check
 
-pub use checked::{CertificateState, Checked};
+pub use checked::{Checked, CheckedInner};
 pub use checker::Checker;
 
 mod checked;

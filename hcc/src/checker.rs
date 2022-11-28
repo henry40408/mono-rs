@@ -1,36 +1,109 @@
+use std::borrow::Cow;
+use std::fmt;
 use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
-use std::time::Instant;
-use std::{borrow::Cow, fmt};
+use std::time::{Instant, SystemTime};
 
 use anyhow::Context as _;
-use chrono::{DateTime, SubsecRound as _, TimeZone, Utc};
-use rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
+use chrono::{TimeZone, Utc};
+use futures::stream::FuturesOrdered;
+use log::debug;
+use rustls::client::{ServerCertVerified, ServerCertVerifier};
+use rustls::{Certificate, ClientConfig, OwnedTrustAnchor, ServerName};
 use x509_parser::parse_x509_certificate;
 
-use crate::checked::{CertificateState, Checked};
+use crate::checked::Checked;
+use crate::CheckedInner;
+
+fn build_http_headers<'a, T>(domain_name: T) -> Cow<'a, str>
+where
+    T: AsRef<str>,
+{
+    let domain_name = domain_name.as_ref();
+    format!(
+        "GET / HTTP/1.1\r\n\
+            Host: {domain_name}\r\n\
+            Connection: close\r\n\
+            Accept-Encoding: identity\r\n\
+            \r\n"
+    )
+    .into()
+}
+
+fn do_check_one<'a, T>(config: Arc<ClientConfig>, domain_name: T) -> anyhow::Result<Checked<'a>>
+where
+    T: Into<Cow<'a, str>>,
+{
+    use anyhow::Error;
+
+    let now = Utc::now();
+
+    let domain_name = domain_name.into();
+    let server_name = ServerName::try_from(domain_name.as_ref())?;
+    let mut conn = rustls::ClientConnection::new(config, server_name)?;
+
+    let mut stream = TcpStream::connect(format!("{domain_name}:443"))?;
+    let mut tls = rustls::Stream::new(&mut conn, &mut stream);
+
+    let start = Instant::now();
+    let _ = tls.write(build_http_headers(domain_name.as_ref()).as_bytes());
+
+    let certificates = tls
+        .conn
+        .peer_certificates()
+        .context("no peer certificates found")?;
+
+    let certificate = certificates.first().context("no peer certificate found")?;
+
+    let (_, cert) = parse_x509_certificate(certificate.as_ref())?;
+    let not_after = match Utc
+        .timestamp_opt(cert.validity().not_after.timestamp(), 0)
+        .single()
+    {
+        Some(t) => t,
+        None => return Err(Error::msg("invalid timestamp")),
+    };
+    Ok(Checked {
+        checked_at: now,
+        domain_name,
+        inner: CheckedInner::Ok {
+            elapsed: start.elapsed(),
+            not_after,
+        },
+    })
+}
+
+struct SkipServerVerification;
+
+impl SkipServerVerification {
+    fn new() -> Arc<Self> {
+        Arc::new(Self)
+    }
+}
+
+impl ServerCertVerifier for SkipServerVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: SystemTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
+    }
+}
 
 /// Checker for SSL certificate
 pub struct Checker {
-    checked_at: DateTime<Utc>,
     config: Arc<ClientConfig>,
-    /// ASCII only?
-    pub ascii: bool,
-    /// Show elapsed time in milliseconds?
-    pub elapsed: bool,
-    /// Grace period before certificate actually expires
-    pub grace_in_days: i64,
 }
 
 impl fmt::Debug for Checker {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Checker")
-            .field("checked_at", &self.checked_at)
-            .field("ascii", &self.ascii)
-            .field("elapsed", &self.elapsed)
-            .field("grace_in_days", &self.grace_in_days)
-            .finish()
+        f.debug_struct("Checker").finish()
     }
 }
 
@@ -47,15 +120,11 @@ impl Default for Checker {
 
         let config = ClientConfig::builder()
             .with_safe_defaults()
-            .with_root_certificates(root_store)
+            .with_custom_certificate_verifier(SkipServerVerification::new())
             .with_no_client_auth();
 
         Checker {
-            ascii: false,
-            checked_at: Utc::now().round_subsecs(0),
             config: Arc::new(config),
-            elapsed: false,
-            grace_in_days: 7,
         }
     }
 }
@@ -73,9 +142,14 @@ impl Checker {
     where
         T: Into<Cow<'a, str>> + Clone,
     {
-        match self.do_check_one(domain_name.clone()) {
+        let config = self.config.clone();
+        match do_check_one(config, domain_name.clone()) {
             Ok(c) => c,
-            Err(e) => Checked::error(domain_name, e),
+            Err(error) => Checked {
+                checked_at: Utc::now(),
+                domain_name: domain_name.into(),
+                inner: CheckedInner::Error { error },
+            },
         }
     }
 
@@ -87,93 +161,41 @@ impl Checker {
     /// client.check_many(&["sha256.badssl.com", "sha256.badssl.com"]);
     /// client.check_many(&["sha256.badssl.com".to_string(), "sha256.badssl.com".to_string()]);
     /// ```
-    pub async fn check_many<'a, T>(&'a self, domain_names: &'a [T]) -> Vec<Checked<'a>>
+    pub async fn check_many<'a, T>(
+        &'a self,
+        domain_names: &'a [T],
+    ) -> anyhow::Result<Vec<Checked<'a>>>
     where
         T: AsRef<str>,
     {
-        let client = Arc::new(self);
-        let mut tasks = vec![];
+        use futures::StreamExt as _;
+
+        let now = Utc::now();
+
+        let mut tasks = FuturesOrdered::new();
         for domain_name in domain_names {
-            let client = client.clone();
-            tasks.push(client.check_one(domain_name.as_ref()));
+            let config = self.config.clone();
+            let domain_name = domain_name.as_ref().to_string();
+            tasks.push_back(tokio::spawn(async move {
+                debug!("check {domain_name}");
+                let checked = match do_check_one(config, domain_name.clone()) {
+                    Ok(c) => c,
+                    Err(error) => Checked {
+                        checked_at: now,
+                        domain_name: domain_name.into(),
+                        inner: CheckedInner::Error { error },
+                    },
+                };
+                debug!("{} checked", checked.domain_name);
+                checked
+            }));
         }
-        futures::future::join_all(tasks).await
-    }
 
-    fn build_http_headers<'a, T>(domain_name: T) -> Cow<'a, str>
-    where
-        T: AsRef<str>,
-    {
-        let domain_name = domain_name.as_ref();
-        format!(
-            "GET / HTTP/1.1\r\n\
-            Host: {domain_name}\r\n\
-            Connection: close\r\n\
-            Accept-Encoding: identity\r\n\
-            \r\n"
-        )
-        .into()
-    }
-
-    fn do_check_one<'a, T>(&'a self, domain_name: T) -> anyhow::Result<Checked<'a>>
-    where
-        T: Into<Cow<'a, str>>,
-    {
-        use anyhow::Error;
-
-        let domain_name = domain_name.into();
-        let server_name = ServerName::try_from(domain_name.as_ref())?;
-        let mut conn = rustls::ClientConnection::new(self.config.clone(), server_name)?;
-
-        let mut stream = TcpStream::connect(format!("{domain_name}:443"))?;
-        let mut tls = rustls::Stream::new(&mut conn, &mut stream);
-
-        let start = Instant::now();
-        match tls.write(Self::build_http_headers(domain_name.as_ref()).as_bytes()) {
-            Ok(_) => (),
-            Err(_e) => return Ok(Checked::expired(self.ascii, domain_name, &self.checked_at)),
-        };
-        let elapsed = start.elapsed();
-
-        let certificates = tls
-            .conn
-            .peer_certificates()
-            .context("no peer certificates found")?;
-
-        let certificate = certificates.first().context("no peer certificate found")?;
-
-        let (_, cert) = parse_x509_certificate(certificate.as_ref())?;
-        let not_after = match Utc
-            .timestamp_opt(cert.validity().not_after.timestamp(), 0)
-            .single()
-        {
-            Some(t) => t,
-            None => {
-                return Ok(Checked::error(
-                    domain_name,
-                    Error::msg("timestamp is out of range"),
-                ))
-            }
-        };
-
-        let days = (not_after - self.checked_at).num_days();
-        let not_after = not_after.timestamp();
-        let warned = days < self.grace_in_days;
-        Ok(Checked {
-            state: CertificateState::Ok {
-                days,
-                not_after,
-                warned,
-            },
-            ascii: self.ascii,
-            checked_at: self.checked_at.timestamp(),
-            domain_name,
-            elapsed: if self.elapsed {
-                Some(elapsed.as_millis())
-            } else {
-                None
-            },
-        })
+        let mut results = vec![];
+        while let Some(task) = tasks.next().await {
+            results.push(task?);
+        }
+        Ok(results)
     }
 }
 
@@ -183,74 +205,42 @@ mod test {
 
     #[tokio::test]
     async fn t_good_certificate() {
-        let mut client = Checker::default();
-        client.grace_in_days = 1;
-
-        let result = client.check_one("sha256.badssl.com").await;
-        assert!(matches!(result.state, CertificateState::Ok { .. }));
-        assert!(result.checked_at > 0);
-        if let CertificateState::Ok {
-            days,
-            not_after,
-            warned,
-        } = result.state
-        {
-            assert!(days > 0);
-            assert!(not_after > 0);
-            assert!(!warned);
+        let client = Checker::default();
+        let checked = client.check_one("sha256.badssl.com").await;
+        assert!(matches!(checked.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = checked.inner {
+            assert!(not_after > checked.checked_at);
         }
     }
 
     #[tokio::test]
     async fn t_bad_certificate() {
-        let mut client = Checker::default();
-        client.grace_in_days = 1;
-
-        let result = client.check_one("expired.badssl.com").await;
-        assert!(matches!(result.state, CertificateState::Expired));
-        assert!(result.checked_at > 0);
+        let client = Checker::default();
+        let checked = client.check_one("expired.badssl.com").await;
+        assert!(matches!(checked.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = checked.inner {
+            assert!(not_after < checked.checked_at);
+        }
     }
 
     #[tokio::test]
-    async fn t_check_many() -> anyhow::Result<()> {
+    async fn t_check_many() {
         let domain_names = vec!["sha256.badssl.com", "expired.badssl.com"];
+        let client = Checker::default();
 
-        let mut client = Checker::default();
-        client.grace_in_days = 1;
-
-        let results = client.check_many(domain_names.as_slice()).await;
+        let results = client.check_many(domain_names.as_slice()).await.unwrap();
         assert_eq!(2, results.len());
 
         let result = &results[0];
-        assert!(matches!(result.state, CertificateState::Ok { .. }));
+        assert!(matches!(result.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = result.inner {
+            assert!(not_after > result.checked_at);
+        }
 
         let result = &results[1];
-        assert!(matches!(result.state, CertificateState::Expired));
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn t_check_many_with_grace_in_days() {
-        let domain_name = "sha256.badssl.com";
-
-        let mut client = Checker::default();
-        client.grace_in_days = 1;
-
-        let result = client.check_one(domain_name).await;
-        assert!(matches!(result.state, CertificateState::Ok { .. }));
-
-        if let CertificateState::Ok { days, .. } = result.state {
-            let client = Checker {
-                grace_in_days: days + 1,
-                ..Default::default()
-            };
-            let result = client.check_one(domain_name).await;
-            assert!(matches!(result.state, CertificateState::Ok { .. }));
-
-            if let CertificateState::Ok { warned, .. } = result.state {
-                assert!(warned);
-            }
+        assert!(matches!(result.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = result.inner {
+            assert!(not_after < result.checked_at);
         }
     }
 
@@ -258,6 +248,6 @@ mod test {
     async fn t_check_one_invalid() {
         let client = Checker::default();
         let result = client.check_one("example.invalid").await;
-        assert!(matches!(result.state, CertificateState::Error(..)));
+        assert!(matches!(result.inner, CheckedInner::Error { .. }));
     }
 }
