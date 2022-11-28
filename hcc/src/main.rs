@@ -251,4 +251,22 @@ mod test {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    async fn t_grace_in_days() {
+        let checker = Checker::default();
+        let checked = checker.check_one("sha256.badssl.com").await;
+        assert!(matches!(checked.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = checked.inner {
+            let duration = not_after - checked.checked_at;
+            let days = duration.num_days();
+            let grace_in_days = days + 1;
+            let result = CheckedString {
+                inner: &checked,
+                grace_in_days,
+            }
+            .to_string();
+            assert!(result.contains(&format!("expires in {days} day(s)")));
+        }
+    }
 }
