@@ -18,7 +18,7 @@ use chrono::Utc;
 use clap::{Parser, Subcommand};
 use cron::Schedule;
 use futures::stream::FuturesUnordered;
-use hcc::{Checked, Checker};
+use hcc::{Checked, CheckedInner, Checker};
 use log::debug;
 use once_cell::sync::OnceCell;
 use pushover::{send_notification, NotificationError};
@@ -76,19 +76,26 @@ impl<'a> std::fmt::Display for CheckedString<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let domain_name = &self.0.domain_name;
         let is_unicode = supports_unicode::on(Stream::Stdout);
-        if let Some(error) = &self.0.error {
-            let icon = if is_unicode { "\u{274c}" } else { "[x]" };
-            write!(f, "{icon} failed to check {domain_name}: {error}")
-        } else if let Some(not_after) = self.0.not_after {
-            let icon = if is_unicode { "\u{2705}" } else { "[v]" };
-            let not_after = not_after.to_rfc3339();
-            write!(
-                f,
-                "{icon} certificate of {domain_name} is valid until {not_after}"
-            )
-        } else {
-            let icon = if is_unicode { "\u{274c}" } else { "[x]" };
-            write!(f, "{icon} certificate of {domain_name} expired")
+        match &self.0.inner {
+            CheckedInner::Ok { not_after, .. } => {
+                if not_after > &self.0.checked_at {
+                    let icon = if is_unicode { "\u{2705}" } else { "[v]" };
+                    write!(
+                        f,
+                        "{icon} {domain_name} expires at {not_after}"
+                    )
+                } else {
+                    let icon = if is_unicode { "\u{274c}" } else { "[x]" };
+                    write!(
+                        f,
+                        "{icon} {domain_name} expired at {not_after}"
+                    )
+                }
+            }
+            CheckedInner::Error { error } => {
+                let icon = if is_unicode { "\u{274c}" } else { "[x]" };
+                write!(f, "{icon} {domain_name}: {error}")
+            }
         }
     }
 }

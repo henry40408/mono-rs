@@ -1,16 +1,18 @@
 use std::io::Write;
 use std::net::TcpStream;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 use std::{borrow::Cow, fmt};
 
 use anyhow::Context as _;
 use chrono::{TimeZone, Utc};
 use futures::stream::FuturesOrdered;
-use rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
+use rustls::client::{ServerCertVerified, ServerCertVerifier};
+use rustls::{Certificate, ClientConfig, OwnedTrustAnchor, ServerName};
 use x509_parser::parse_x509_certificate;
 
 use crate::checked::Checked;
+use crate::CheckedInner;
 
 fn build_http_headers<'a, T>(domain_name: T) -> Cow<'a, str>
 where
@@ -43,17 +45,7 @@ where
     let mut tls = rustls::Stream::new(&mut conn, &mut stream);
 
     let start = Instant::now();
-    match tls.write(build_http_headers(domain_name.as_ref()).as_bytes()) {
-        Ok(_) => (),
-        Err(_e) => {
-            return Ok(Checked {
-                checked_at: now,
-                domain_name,
-                elapsed: Some(start.elapsed()),
-                ..Default::default()
-            })
-        }
-    };
+    let _ = tls.write(build_http_headers(domain_name.as_ref()).as_bytes());
 
     let certificates = tls
         .conn
@@ -73,10 +65,33 @@ where
     Ok(Checked {
         checked_at: now,
         domain_name,
-        elapsed: Some(start.elapsed()),
-        not_after: Some(not_after),
-        ..Default::default()
+        inner: CheckedInner::Ok {
+            elapsed: start.elapsed(),
+            not_after,
+        },
     })
+}
+
+struct SkipServerVerification;
+
+impl SkipServerVerification {
+    fn new() -> Arc<Self> {
+        Arc::new(Self)
+    }
+}
+
+impl ServerCertVerifier for SkipServerVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: SystemTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        Ok(ServerCertVerified::assertion())
+    }
 }
 
 /// Checker for SSL certificate
@@ -107,7 +122,7 @@ impl Default for Checker {
 
         let config = ClientConfig::builder()
             .with_safe_defaults()
-            .with_root_certificates(root_store)
+            .with_custom_certificate_verifier(SkipServerVerification::new())
             .with_no_client_auth();
 
         Checker {
@@ -136,8 +151,7 @@ impl Checker {
             Err(error) => Checked {
                 checked_at: Utc::now(),
                 domain_name: domain_name.into(),
-                error: Some(error),
-                ..Default::default()
+                inner: CheckedInner::Error { error },
             },
         }
     }
@@ -171,8 +185,7 @@ impl Checker {
                     Err(error) => Checked {
                         checked_at: now,
                         domain_name: domain_name.into(),
-                        error: Some(error),
-                        ..Default::default()
+                        inner: CheckedInner::Error { error },
                     },
                 }
             }));
@@ -194,14 +207,20 @@ mod test {
     async fn t_good_certificate() {
         let client = Checker::default();
         let checked = client.check_one("sha256.badssl.com").await;
-        assert!(checked.not_after.is_some());
+        assert!(matches!(checked.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = checked.inner {
+            assert!(not_after > checked.checked_at);
+        }
     }
 
     #[tokio::test]
     async fn t_bad_certificate() {
         let client = Checker::default();
         let checked = client.check_one("expired.badssl.com").await;
-        assert!(checked.not_after.is_none());
+        assert!(matches!(checked.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = checked.inner {
+            assert!(not_after < checked.checked_at);
+        }
     }
 
     #[tokio::test]
@@ -213,17 +232,22 @@ mod test {
         assert_eq!(2, results.len());
 
         let result = &results[0];
-        assert!(result.not_after.is_some());
+        assert!(matches!(result.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = result.inner {
+            assert!(not_after > result.checked_at);
+        }
 
         let result = &results[1];
-        assert!(result.not_after.is_none());
+        assert!(matches!(result.inner, CheckedInner::Ok { .. }));
+        if let CheckedInner::Ok { not_after, .. } = result.inner {
+            assert!(not_after < result.checked_at);
+        }
     }
 
     #[tokio::test]
     async fn t_check_one_invalid() {
         let client = Checker::default();
         let result = client.check_one("example.invalid").await;
-        assert!(result.error.is_some());
-        assert!(result.not_after.is_none());
+        assert!(matches!(result.inner, CheckedInner::Error { .. }));
     }
 }
