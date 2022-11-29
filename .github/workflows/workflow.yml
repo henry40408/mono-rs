@@ -15,6 +15,26 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+  doc:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.65.0
+      - uses: Swatinem/rust-cache@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --no-deps --workspace
+      - uses: JamesIves/github-pages-deploy-action@v4.2.5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: gh-pages
+          folder: target/doc
+          single-commit: true
   lints:
     runs-on: ubuntu-latest
     steps:
