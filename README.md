@@ -2,7 +2,7 @@
 
 > Mono repository for my Rust projects
 
-![CI](https://img.shields.io/github/workflow/status/henry40408/mono-rs/CI)
+![CI]( https://img.shields.io/github/actions/workflow/status/henry40408/mono-rs/workflow.yml?branch=main)
 ![license](https://img.shields.io/github/license/henry40408/mono-rs)
 ![top languages](https://img.shields.io/github/languages/top/henry40408/mono-rs)
 
@@ -15,7 +15,7 @@
 
 ## Toolchain & Targets
 
-![rust](https://img.shields.io/badge/rust-1.65.0%20|%20stable%20|%20nightly-blue)
+![rust](https://img.shields.io/badge/rust-1.67.0%20|%20stable%20|%20nightly-blue)
 ![arch](https://img.shields.io/badge/arch-amd64%20%7C%20arm64-blue)
 ![os](https://img.shields.io/badge/os-linux%20%7C%20macos%20%7C%20windows-blue)
 ![libc](https://img.shields.io/badge/libc-gnu%20%7C%20musl%20%7C%20msvc-blue)
