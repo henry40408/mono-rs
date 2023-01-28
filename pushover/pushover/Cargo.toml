@@ -11,7 +11,7 @@ publish = false
 
 [dependencies]
 ammonia = "3"
-infer = "0.11"
+infer = "0.12"
 log = "0.4"
 maplit = "1" # for ammonia
 mime = "0.3"

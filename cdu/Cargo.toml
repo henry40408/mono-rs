@@ -18,7 +18,7 @@ clap = { version = "4", default-features = false, features = [
   "help",
   "std",
 ] }
-cloudflare = { version = "0.9.1", default-features = false } # use API response structs only
+cloudflare = { version = "0.10", default-features = false } # use API response structs only
 cron = "0.12"
 pretty_env_logger = "0.4"
 exponential-backoff = "1.1"
