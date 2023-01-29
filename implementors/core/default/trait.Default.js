@@ -1,0 +1,4 @@
+(function() {var implementors = {
+"hcc":[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.66.1/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"hcc/struct.Checker.html\" title=\"struct hcc::Checker\">Checker</a>"]],
+"pushover":[["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.66.1/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"pushover/struct.Notification.html\" title=\"struct pushover::Notification\">Notification</a>&lt;'a&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

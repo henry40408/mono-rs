@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"comics":[["impl&lt;'a&gt; Template for <a class=\"struct\" href=\"comics/struct.IndexTemplate.html\" title=\"struct comics::IndexTemplate\">IndexTemplate</a>&lt;'a&gt;"],["impl&lt;'a&gt; Template for <a class=\"struct\" href=\"comics/struct.ComicTemplate.html\" title=\"struct comics::ComicTemplate\">ComicTemplate</a>&lt;'a&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":[["list_comics",""],["main",""]],"mod":[["filters",""]],"struct":[["Comic",""],["ComicTemplate",""],["Comics",""],["IndexTemplate",""],["Opts",""],["Page",""]]};
