@@ -2,7 +2,7 @@
 
 > Mono repository for my Rust projects
 
-![CI]( https://img.shields.io/github/actions/workflow/status/henry40408/mono-rs/workflow.yml?branch=main)
+![CI]( https://img.shields.io/github/actions/workflow/status/henry40408/mono-rs/workflow.yml?branch=master)
 ![license](https://img.shields.io/github/license/henry40408/mono-rs)
 ![top languages](https://img.shields.io/github/languages/top/henry40408/mono-rs)
 
